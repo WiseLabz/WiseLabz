@@ -106,6 +106,7 @@ export const getGetAuthProvidersQueryOptions = <
 export type GetAuthProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthProviders>>>;
 export type GetAuthProvidersQueryError = ErrorType<unknown>;
 
+/** @summary List enabled auth providers (local + OIDC) for the login screen */
 export function useGetAuthProviders<
   TData = Awaited<ReturnType<typeof getAuthProviders>>,
   TError = ErrorType<unknown>,
@@ -124,6 +125,7 @@ export function useGetAuthProviders<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List enabled auth providers (local + OIDC) for the login screen */
 export function useGetAuthProviders<
   TData = Awaited<ReturnType<typeof getAuthProviders>>,
   TError = ErrorType<unknown>,
@@ -142,6 +144,7 @@ export function useGetAuthProviders<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List enabled auth providers (local + OIDC) for the login screen */
 export function useGetAuthProviders<
   TData = Awaited<ReturnType<typeof getAuthProviders>>,
   TError = ErrorType<unknown>,
@@ -152,10 +155,7 @@ export function useGetAuthProviders<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List enabled auth providers (local + OIDC) for the login screen
- */
-
+/** @summary List enabled auth providers (local + OIDC) for the login screen */
 export function useGetAuthProviders<
   TData = Awaited<ReturnType<typeof getAuthProviders>>,
   TError = ErrorType<unknown>,
@@ -240,6 +240,7 @@ export type PostAuthLoginMutationError = ErrorType<BadRequestResponse | Unauthor
 export type PostAuthLoginMutationVariables = { data: BodyType<LoginRequest> };
 
 /**
+ * On success returns a short-lived access token in the body and sets the refresh token as an HttpOnly; Secure; SameSite=Strict cookie (§8.7). A user with a confirmed second factor (#279) instead gets `LoginMfaRequired` — no session yet — and must finish with POST /auth/login/mfa. A user the require_2fa policy covers but who hasn't enrolled gets a normal session plus `mfaEnrollmentRequired: true`, confined to the enrollment allowlist until they enroll.
  * @summary Local username/password login
  */
 export const usePostAuthLogin = <
@@ -331,6 +332,7 @@ export type PostAuthLoginMfaMutationError = ErrorType<BadRequestResponse | Unaut
 export type PostAuthLoginMfaMutationVariables = { data: BodyType<LoginMfaRequest> };
 
 /**
+ * Second step of login for a user with a confirmed factor (#279). Exactly one of `totp` or `recoveryCode` proves the second factor; failures count toward the same lockout as a bad password.
  * @summary Finish a login that required a second factor
  */
 export const usePostAuthLoginMfa = <
@@ -423,9 +425,7 @@ export type PostAuthLoginMfaWebauthnBeginMutationVariables = {
   data: BodyType<PostAuthLoginMfaWebauthnBeginBody>;
 };
 
-/**
- * @summary Begin a WebAuthn second-factor login ceremony
- */
+/** @summary Begin a WebAuthn second-factor login ceremony */
 export const usePostAuthLoginMfaWebauthnBegin = <
   TError = ErrorType<UnauthorizedResponse | void>,
   TContext = unknown,
@@ -513,9 +513,7 @@ export type PostAuthOidcCallbackMutationBody = BodyType<OidcCallbackRequest>;
 export type PostAuthOidcCallbackMutationError = ErrorType<UnauthorizedResponse>;
 export type PostAuthOidcCallbackMutationVariables = { data: BodyType<OidcCallbackRequest> };
 
-/**
- * @summary Exchange an OIDC authorization code for a WiseLabz session
- */
+/** @summary Exchange an OIDC authorization code for a WiseLabz session */
 export const usePostAuthOidcCallback = <
   TError = ErrorType<UnauthorizedResponse>,
   TContext = unknown,
@@ -582,9 +580,7 @@ export type PostAuthRefreshMutationResult = NonNullable<
 
 export type PostAuthRefreshMutationError = ErrorType<UnauthorizedResponse>;
 
-/**
- * @summary Silent refresh — mints a new access token from the refresh cookie
- */
+/** @summary Silent refresh — mints a new access token from the refresh cookie */
 export const usePostAuthRefresh = <TError = ErrorType<UnauthorizedResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -636,9 +632,7 @@ export type PostAuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof
 
 export type PostAuthLogoutMutationError = ErrorType<unknown>;
 
-/**
- * @summary Invalidate the refresh token and clear the cookie
- */
+/** @summary Invalidate the refresh token and clear the cookie */
 export const usePostAuthLogout = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -720,6 +714,7 @@ export type PostAuthElevateMutationError = ErrorType<Error | UnauthorizedRespons
 export type PostAuthElevateMutationVariables = { data: BodyType<ElevationRequest> };
 
 /**
+ * Re-authenticates the current operator (password, or TOTP when configured) and mints a short-lived elevation token scoped to one destructive action (ARCHITECTURE.md 2026-06-27). The token is replayed in the `X-Elevation-Token` header on the destructive request (e.g. connector removal). It is bound to the session that earned it and to `target`, and is spent by one request. Only required when `stepUpForDestructive` is enabled.
  * @summary Step-up re-authentication for a single destructive action
  */
 export const usePostAuthElevate = <
@@ -790,6 +785,10 @@ export type GetAuthElevateMethodsQueryResult = NonNullable<
 >;
 export type GetAuthElevateMethodsQueryError = ErrorType<UnauthorizedResponse>;
 
+/**
+ * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
+ * @summary Which step-up method(s) POST /auth/elevate expects
+ */
 export function useGetAuthElevateMethods<
   TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -810,6 +809,10 @@ export function useGetAuthElevateMethods<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
+ * @summary Which step-up method(s) POST /auth/elevate expects
+ */
 export function useGetAuthElevateMethods<
   TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -830,6 +833,10 @@ export function useGetAuthElevateMethods<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
+ * @summary Which step-up method(s) POST /auth/elevate expects
+ */
 export function useGetAuthElevateMethods<
   TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -843,9 +850,9 @@ export function useGetAuthElevateMethods<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * `["password"]` for a local account without a confirmed factor, `["totp","recovery"]` once one is confirmed (#279 part 1), or `["oidc"]` for an account that signs in through an identity provider (#279 part 3). PR 2 appends `"webauthn"` alongside totp/recovery.
  * @summary Which step-up method(s) POST /auth/elevate expects
  */
-
 export function useGetAuthElevateMethods<
   TData = Awaited<ReturnType<typeof getAuthElevateMethods>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -935,9 +942,7 @@ export type PostAuthElevateWebauthnBeginMutationVariables = {
   data: BodyType<PostAuthElevateWebauthnBeginBody>;
 };
 
-/**
- * @summary Begin WebAuthn step-up for one action
- */
+/** @summary Begin WebAuthn step-up for one action */
 export const usePostAuthElevateWebauthnBegin = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -1028,6 +1033,7 @@ export type PostAuthElevateOidcBeginMutationVariables = {
 };
 
 /**
+ * For a caller whose account signs in through an IdP and has no password to confirm with POST /auth/elevate. Returns an authorize URL — opened in a popup — that forces the IdP to re-prompt for credentials (`prompt=login`, `max_age=0`) instead of silently reusing an existing IdP session. Uses the normal `/auth/callback` redirect URL, so no new IdP redirect URI registration is needed.
  * @summary Start OIDC step-up re-authentication (#279 part 3)
  */
 export const usePostAuthElevateOidcBegin = <
@@ -1122,6 +1128,7 @@ export type PostAuthElevateOidcCompleteMutationVariables = {
 };
 
 /**
+ * Exchanges the popup's authorization code, requires the re-authenticated `iss`/`sub` to match the caller's linked OIDC identity, and requires `auth_time` to be present and within 120s of now. Returns `401 {code: "oidc_reauth_unsupported"}` when the IdP omits `auth_time`. On success, mints the same elevation token POST /auth/elevate would.
  * @summary Finish OIDC step-up re-authentication (#279 part 3)
  */
 export const usePostAuthElevateOidcComplete = <
@@ -1184,6 +1191,7 @@ export const getGetAuthApiKeysQueryOptions = <
 export type GetAuthApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthApiKeys>>>;
 export type GetAuthApiKeysQueryError = ErrorType<unknown>;
 
+/** @summary List the current user's API keys */
 export function useGetAuthApiKeys<
   TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
   TError = ErrorType<unknown>,
@@ -1202,6 +1210,7 @@ export function useGetAuthApiKeys<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's API keys */
 export function useGetAuthApiKeys<
   TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
   TError = ErrorType<unknown>,
@@ -1220,6 +1229,7 @@ export function useGetAuthApiKeys<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's API keys */
 export function useGetAuthApiKeys<
   TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
   TError = ErrorType<unknown>,
@@ -1230,10 +1240,7 @@ export function useGetAuthApiKeys<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List the current user's API keys
- */
-
+/** @summary List the current user's API keys */
 export function useGetAuthApiKeys<
   TData = Awaited<ReturnType<typeof getAuthApiKeys>>,
   TError = ErrorType<unknown>,
@@ -1320,6 +1327,7 @@ export type PostAuthApiKeysMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostAuthApiKeysMutationVariables = { data: BodyType<ApiKeyCreate> };
 
 /**
+ * The opaque token is returned once and cannot be retrieved again. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `apiKey.create`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. Scoped (restricted) API keys are refused with 403 before the elevation check.
  * @summary Create an API key for the current user
  */
 export const usePostAuthApiKeys = <
@@ -1400,9 +1408,7 @@ export type DeleteAuthApiKeysIdMutationResult = NonNullable<
 export type DeleteAuthApiKeysIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse>;
 export type DeleteAuthApiKeysIdMutationVariables = { id: string };
 
-/**
- * @summary Revoke one of the current user's API keys
- */
+/** @summary Revoke one of the current user's API keys */
 export const useDeleteAuthApiKeysId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,

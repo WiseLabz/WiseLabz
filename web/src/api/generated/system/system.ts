@@ -124,6 +124,7 @@ export const getGetSystemInfoQueryOptions = <
 export type GetSystemInfoQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemInfo>>>;
 export type GetSystemInfoQueryError = ErrorType<unknown>;
 
+/** @summary Instance info (version, sync schedule, integrations) — operator */
 export function useGetSystemInfo<
   TData = Awaited<ReturnType<typeof getSystemInfo>>,
   TError = ErrorType<unknown>,
@@ -142,6 +143,7 @@ export function useGetSystemInfo<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Instance info (version, sync schedule, integrations) — operator */
 export function useGetSystemInfo<
   TData = Awaited<ReturnType<typeof getSystemInfo>>,
   TError = ErrorType<unknown>,
@@ -160,6 +162,7 @@ export function useGetSystemInfo<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Instance info (version, sync schedule, integrations) — operator */
 export function useGetSystemInfo<
   TData = Awaited<ReturnType<typeof getSystemInfo>>,
   TError = ErrorType<unknown>,
@@ -170,10 +173,7 @@ export function useGetSystemInfo<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Instance info (version, sync schedule, integrations) — operator
- */
-
+/** @summary Instance info (version, sync schedule, integrations) — operator */
 export function useGetSystemInfo<
   TData = Awaited<ReturnType<typeof getSystemInfo>>,
   TError = ErrorType<unknown>,
@@ -238,6 +238,7 @@ export const getGetSystemAuditQueryOptions = <
 export type GetSystemAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemAudit>>>;
 export type GetSystemAuditQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds. */
 export function useGetSystemAudit<
   TData = Awaited<ReturnType<typeof getSystemAudit>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -257,6 +258,7 @@ export function useGetSystemAudit<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds. */
 export function useGetSystemAudit<
   TData = Awaited<ReturnType<typeof getSystemAudit>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -276,6 +278,7 @@ export function useGetSystemAudit<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds. */
 export function useGetSystemAudit<
   TData = Awaited<ReturnType<typeof getSystemAudit>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -287,10 +290,7 @@ export function useGetSystemAudit<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds.
- */
-
+/** @summary Audit trail (docs/AUDIT.md) — operator. Covers connector changes and syncs, elevation, auth settings changes, and document restores; written only after the action succeeds. */
 export function useGetSystemAudit<
   TData = Awaited<ReturnType<typeof getSystemAudit>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -360,6 +360,7 @@ export type GetSystemAuditExportQueryResult = NonNullable<
 >;
 export type GetSystemAuditExportQueryError = ErrorType<Error | ForbiddenResponse>;
 
+/** @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator. */
 export function useGetSystemAuditExport<
   TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
   TError = ErrorType<Error | ForbiddenResponse>,
@@ -381,6 +382,7 @@ export function useGetSystemAuditExport<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator. */
 export function useGetSystemAuditExport<
   TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
   TError = ErrorType<Error | ForbiddenResponse>,
@@ -402,6 +404,7 @@ export function useGetSystemAuditExport<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator. */
 export function useGetSystemAuditExport<
   TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
   TError = ErrorType<Error | ForbiddenResponse>,
@@ -415,10 +418,7 @@ export function useGetSystemAuditExport<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator.
- */
-
+/** @summary Export the full (unpaginated) set of audit records matching the given filters, as CSV or JSON — operator. */
 export function useGetSystemAuditExport<
   TData = Awaited<ReturnType<typeof getSystemAuditExport>>,
   TError = ErrorType<Error | ForbiddenResponse>,
@@ -487,6 +487,7 @@ export type GetSystemSettingsRetentionQueryResult = NonNullable<
 >;
 export type GetSystemSettingsRetentionQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned. */
 export function useGetSystemSettingsRetention<
   TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -507,6 +508,7 @@ export function useGetSystemSettingsRetention<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned. */
 export function useGetSystemSettingsRetention<
   TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -527,6 +529,7 @@ export function useGetSystemSettingsRetention<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned. */
 export function useGetSystemSettingsRetention<
   TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -539,10 +542,7 @@ export function useGetSystemSettingsRetention<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned.
- */
-
+/** @summary Current data-retention cleanup configuration — operator. A default row (seeded from config on first boot) is always returned. */
 export function useGetSystemSettingsRetention<
   TData = Awaited<ReturnType<typeof getSystemSettingsRetention>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -630,9 +630,7 @@ export type PutSystemSettingsRetentionMutationBody = BodyType<RetentionSettings>
 export type PutSystemSettingsRetentionMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PutSystemSettingsRetentionMutationVariables = { data: BodyType<RetentionSettings> };
 
-/**
- * @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `runbookOpenRunHours` must be between 1 and 8760 (code `invalid_hours` otherwise); `runbookRunDays` must be between 0 and 3650 (0 disables cleanup, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`.
- */
+/** @summary Update the data-retention cleanup configuration — operator. Each `*Days` field must be >= 0 (0 disables cleanup for that category, rejected otherwise with code `invalid_days`); `runbookOpenRunHours` must be between 1 and 8760 (code `invalid_hours` otherwise); `runbookRunDays` must be between 0 and 3650 (0 disables cleanup, rejected otherwise with code `invalid_days`); `cronExpr` must be a valid 5-field or 6-field cron expression (code `invalid_cron` otherwise). Re-registers the retention cron job with the new schedule. Audited as `retention.settings.update`. */
 export const usePutSystemSettingsRetention = <
   TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
@@ -700,6 +698,7 @@ export type GetSystemBackupExportQueryResult = NonNullable<
 >;
 export type GetSystemBackupExportQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md. */
 export function useGetSystemBackupExport<
   TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -720,6 +719,7 @@ export function useGetSystemBackupExport<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md. */
 export function useGetSystemBackupExport<
   TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -740,6 +740,7 @@ export function useGetSystemBackupExport<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md. */
 export function useGetSystemBackupExport<
   TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -752,10 +753,7 @@ export function useGetSystemBackupExport<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md.
- */
-
+/** @summary Export a portable backup bundle (connectors, docs+versions, templates+sections, an informational AI config summary) — operator. Connector secret fields and the AI API key are never included; see docs/BACKUP.md. */
 export function useGetSystemBackupExport<
   TData = Awaited<ReturnType<typeof getSystemBackupExport>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -838,9 +836,7 @@ export type PostSystemBackupImportMutationVariables = {
   data: BodyType<NonReadonly<Blob | BackupBundle>>;
 };
 
-/**
- * @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Accepts v1 JSON and v2 ZIP; configurable limit defaults to 1 GiB.
- */
+/** @summary Import a backup bundle — operator. Validates referential integrity and format version before writing anything; existing records (by ID) are left untouched and counted as skipped. The AI config summary, if present, is never applied. Accepts v1 JSON and v2 ZIP; configurable limit defaults to 1 GiB. */
 export const usePostSystemBackupImport = <
   TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
@@ -909,6 +905,7 @@ export type GetSystemBackupScheduleQueryResult = NonNullable<
 >;
 export type GetSystemBackupScheduleQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value. */
 export function useGetSystemBackupSchedule<
   TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -929,6 +926,7 @@ export function useGetSystemBackupSchedule<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value. */
 export function useGetSystemBackupSchedule<
   TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -949,6 +947,7 @@ export function useGetSystemBackupSchedule<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value. */
 export function useGetSystemBackupSchedule<
   TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -961,10 +960,7 @@ export function useGetSystemBackupSchedule<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value.
- */
-
+/** @summary Current scheduled-backup configuration — operator. A default schedule is seeded at startup, so this always returns a value. */
 export function useGetSystemBackupSchedule<
   TData = Awaited<ReturnType<typeof getSystemBackupSchedule>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1051,9 +1047,7 @@ export type PutSystemBackupScheduleMutationBody = BodyType<BackupSchedule>;
 export type PutSystemBackupScheduleMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PutSystemBackupScheduleMutationVariables = { data: BodyType<BackupSchedule> };
 
-/**
- * @summary Update the scheduled-backup configuration — operator. `cronExpr` must be a valid 5-field or 6-field cron expression; an invalid one is rejected (code `invalid_cron`) before it's persisted or handed to the scheduler. Re-registers the backup cron job with the new schedule. Audited as `backup.schedule.update`.
- */
+/** @summary Update the scheduled-backup configuration — operator. `cronExpr` must be a valid 5-field or 6-field cron expression; an invalid one is rejected (code `invalid_cron`) before it's persisted or handed to the scheduler. Re-registers the backup cron job with the new schedule. Audited as `backup.schedule.update`. */
 export const usePutSystemBackupSchedule = <
   TError = ErrorType<Error | ForbiddenResponse>,
   TContext = unknown,
@@ -1125,6 +1119,7 @@ export type GetSystemBackupRunsQueryResult = NonNullable<
 >;
 export type GetSystemBackupRunsQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Paginated history of backups created by the schedule or on demand — operator */
 export function useGetSystemBackupRuns<
   TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1146,6 +1141,7 @@ export function useGetSystemBackupRuns<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Paginated history of backups created by the schedule or on demand — operator */
 export function useGetSystemBackupRuns<
   TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1167,6 +1163,7 @@ export function useGetSystemBackupRuns<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Paginated history of backups created by the schedule or on demand — operator */
 export function useGetSystemBackupRuns<
   TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1180,10 +1177,7 @@ export function useGetSystemBackupRuns<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Paginated history of backups created by the schedule or on demand — operator
- */
-
+/** @summary Paginated history of backups created by the schedule or on demand — operator */
 export function useGetSystemBackupRuns<
   TData = Awaited<ReturnType<typeof getSystemBackupRuns>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1253,9 +1247,7 @@ export type PostSystemBackupRunMutationResult = NonNullable<
 
 export type PostSystemBackupRunMutationError = ErrorType<ForbiddenResponse>;
 
-/**
- * @summary Trigger a backup immediately (`triggeredBy: "manual"`) — operator. Writes the bundle to the configured backup directory, records the run, and applies the current retention policy (same pruning as scheduled backups). Audited as `backup.run.created`, and as `backup.run.pruned` if the retention policy removes any older runs.
- */
+/** @summary Trigger a backup immediately (`triggeredBy: "manual"`) — operator. Writes the bundle to the configured backup directory, records the run, and applies the current retention policy (same pruning as scheduled backups). Audited as `backup.run.created`, and as `backup.run.pruned` if the retention policy removes any older runs. */
 export const usePostSystemBackupRun = <TError = ErrorType<ForbiddenResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -1313,6 +1305,7 @@ export type GetSystemDiagnosticsQueryResult = NonNullable<
 >;
 export type GetSystemDiagnosticsQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md. */
 export function useGetSystemDiagnostics<
   TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1333,6 +1326,7 @@ export function useGetSystemDiagnostics<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md. */
 export function useGetSystemDiagnostics<
   TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1353,6 +1347,7 @@ export function useGetSystemDiagnostics<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md. */
 export function useGetSystemDiagnostics<
   TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1365,10 +1360,7 @@ export function useGetSystemDiagnostics<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md.
- */
-
+/** @summary Sanitized diagnostics bundle (health, versions, secret-free config, recent failures) — operator. See docs/DIAGNOSTICS.md. */
 export function useGetSystemDiagnostics<
   TData = Awaited<ReturnType<typeof getSystemDiagnostics>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1428,6 +1420,7 @@ export const getGetSystemJobsQueryOptions = <
 export type GetSystemJobsQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemJobs>>>;
 export type GetSystemJobsQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Scheduled background jobs and persisted health (operator) */
 export function useGetSystemJobs<
   TData = Awaited<ReturnType<typeof getSystemJobs>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1446,6 +1439,7 @@ export function useGetSystemJobs<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Scheduled background jobs and persisted health (operator) */
 export function useGetSystemJobs<
   TData = Awaited<ReturnType<typeof getSystemJobs>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1464,6 +1458,7 @@ export function useGetSystemJobs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Scheduled background jobs and persisted health (operator) */
 export function useGetSystemJobs<
   TData = Awaited<ReturnType<typeof getSystemJobs>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1474,10 +1469,7 @@ export function useGetSystemJobs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Scheduled background jobs and persisted health (operator)
- */
-
+/** @summary Scheduled background jobs and persisted health (operator) */
 export function useGetSystemJobs<
   TData = Awaited<ReturnType<typeof getSystemJobs>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -1535,6 +1527,7 @@ export const getGetHealthQueryOptions = <
 export type GetHealthQueryResult = NonNullable<Awaited<ReturnType<typeof getHealth>>>;
 export type GetHealthQueryError = ErrorType<unknown>;
 
+/** @summary Health of backend + integrations */
 export function useGetHealth<
   TData = Awaited<ReturnType<typeof getHealth>>,
   TError = ErrorType<unknown>,
@@ -1553,6 +1546,7 @@ export function useGetHealth<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Health of backend + integrations */
 export function useGetHealth<
   TData = Awaited<ReturnType<typeof getHealth>>,
   TError = ErrorType<unknown>,
@@ -1571,6 +1565,7 @@ export function useGetHealth<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Health of backend + integrations */
 export function useGetHealth<
   TData = Awaited<ReturnType<typeof getHealth>>,
   TError = ErrorType<unknown>,
@@ -1581,10 +1576,7 @@ export function useGetHealth<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Health of backend + integrations
- */
-
+/** @summary Health of backend + integrations */
 export function useGetHealth<
   TData = Awaited<ReturnType<typeof getHealth>>,
   TError = ErrorType<unknown>,
@@ -1643,6 +1635,10 @@ export const getGetHealthzQueryOptions = <
 export type GetHealthzQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthz>>>;
 export type GetHealthzQueryError = ErrorType<unknown>;
 
+/**
+ * Available at the server root; reports whether the HTTP server is running.
+ * @summary Liveness probe
+ */
 export function useGetHealthz<
   TData = Awaited<ReturnType<typeof getHealthz>>,
   TError = ErrorType<unknown>,
@@ -1661,6 +1657,10 @@ export function useGetHealthz<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Available at the server root; reports whether the HTTP server is running.
+ * @summary Liveness probe
+ */
 export function useGetHealthz<
   TData = Awaited<ReturnType<typeof getHealthz>>,
   TError = ErrorType<unknown>,
@@ -1679,6 +1679,10 @@ export function useGetHealthz<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Available at the server root; reports whether the HTTP server is running.
+ * @summary Liveness probe
+ */
 export function useGetHealthz<
   TData = Awaited<ReturnType<typeof getHealthz>>,
   TError = ErrorType<unknown>,
@@ -1690,9 +1694,9 @@ export function useGetHealthz<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Available at the server root; reports whether the HTTP server is running.
  * @summary Liveness probe
  */
-
 export function useGetHealthz<
   TData = Awaited<ReturnType<typeof getHealthz>>,
   TError = ErrorType<unknown>,
@@ -1751,6 +1755,10 @@ export const getGetReadyzQueryOptions = <
 export type GetReadyzQueryResult = NonNullable<Awaited<ReturnType<typeof getReadyz>>>;
 export type GetReadyzQueryError = ErrorType<Readiness>;
 
+/**
+ * Available at the server root; returns 503 when the database is unavailable or migrations are pending.
+ * @summary Readiness probe
+ */
 export function useGetReadyz<
   TData = Awaited<ReturnType<typeof getReadyz>>,
   TError = ErrorType<Readiness>,
@@ -1769,6 +1777,10 @@ export function useGetReadyz<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Available at the server root; returns 503 when the database is unavailable or migrations are pending.
+ * @summary Readiness probe
+ */
 export function useGetReadyz<
   TData = Awaited<ReturnType<typeof getReadyz>>,
   TError = ErrorType<Readiness>,
@@ -1787,6 +1799,10 @@ export function useGetReadyz<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Available at the server root; returns 503 when the database is unavailable or migrations are pending.
+ * @summary Readiness probe
+ */
 export function useGetReadyz<
   TData = Awaited<ReturnType<typeof getReadyz>>,
   TError = ErrorType<Readiness>,
@@ -1798,9 +1814,9 @@ export function useGetReadyz<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Available at the server root; returns 503 when the database is unavailable or migrations are pending.
  * @summary Readiness probe
  */
-
 export function useGetReadyz<
   TData = Awaited<ReturnType<typeof getReadyz>>,
   TError = ErrorType<Readiness>,
@@ -1859,6 +1875,7 @@ export type PostWsTicketMutationResult = NonNullable<Awaited<ReturnType<typeof p
 export type PostWsTicketMutationError = ErrorType<UnauthorizedResponse | ForbiddenResponse>;
 
 /**
+ * Redeem it as `?ticket=` on GET /ws (see docs/WS_CONTRACT.md). Read-only and connector-restricted API keys may mint one; the socket then receives only the connector events the key's owner can read, narrowed to the key's connectors. Run transitions use runbook.run.updated; its payload is RunbookRunUpdatedEvent and contains identifiers and states only. Network discovery events (discovery.progress, discovery.candidate, discovery.complete) reach only the admin who started the scan.
  * @summary Mint a one-time WebSocket ticket for the authenticated caller
  */
 export const usePostWsTicket = <

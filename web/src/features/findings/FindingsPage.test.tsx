@@ -9,7 +9,7 @@ import { FindingsPage } from './FindingsPage';
 
 const server = setupServer(http.get('/api/connectors', () => HttpResponse.json([])));
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers(http.get('/api/connectors', () => HttpResponse.json([])));
   cleanup();

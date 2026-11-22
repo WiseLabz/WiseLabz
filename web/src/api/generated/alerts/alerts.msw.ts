@@ -7,9 +7,16 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { Alert, AlertBulkSnoozeResponse, AlertPage, RunbookDraft } from '../../model';
+import type {
+  Alert,
+  AlertBulkSnoozeRequest,
+  AlertBulkSnoozeResponse,
+  AlertPage,
+  PostAlertsAlertIdSnoozeBody,
+  RunbookDraft,
+} from '../../model';
 
 import {
   getGetAlertsAlertIdResponseMock,
@@ -33,13 +40,12 @@ export {
 
 export const getGetAlertsMockHandler = (
   overrideResponse?:
-    | AlertPage
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<AlertPage> | AlertPage),
+    AlertPage | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AlertPage> | AlertPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/alerts',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -55,12 +61,13 @@ export const getGetAlertsMockHandler = (
 
 export const getGetAlertsAlertIdMockHandler = (
   overrideResponse?:
-    Alert | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Alert> | Alert),
+    | Alert
+    | ((info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => Promise<Alert> | Alert),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ alertId: string }>(
     '*/alerts/:alertId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -76,12 +83,13 @@ export const getGetAlertsAlertIdMockHandler = (
 
 export const getPostAlertsAlertIdResolveMockHandler = (
   overrideResponse?:
-    Alert | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Alert> | Alert),
+    | Alert
+    | ((info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => Promise<Alert> | Alert),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ alertId: string }>(
     '*/alerts/:alertId/resolve',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -97,12 +105,13 @@ export const getPostAlertsAlertIdResolveMockHandler = (
 
 export const getPostAlertsAlertIdDismissMockHandler = (
   overrideResponse?:
-    Alert | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Alert> | Alert),
+    | Alert
+    | ((info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => Promise<Alert> | Alert),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ alertId: string }>(
     '*/alerts/:alertId/dismiss',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -118,12 +127,17 @@ export const getPostAlertsAlertIdDismissMockHandler = (
 
 export const getPostAlertsAlertIdSnoozeMockHandler = (
   overrideResponse?:
-    Alert | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Alert> | Alert),
+    | Alert
+    | ((
+        info: Parameters<HttpResponseResolver<{ alertId: string }, PostAlertsAlertIdSnoozeBody>>[0]
+      ) => Promise<Alert> | Alert),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ alertId: string }, PostAlertsAlertIdSnoozeBody>(
     '*/alerts/:alertId/snooze',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<{ alertId: string }, PostAlertsAlertIdSnoozeBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -141,13 +155,13 @@ export const getPostAlertsAlertIdDraftRunbookMockHandler = (
   overrideResponse?:
     | RunbookDraft
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]
       ) => Promise<RunbookDraft> | RunbookDraft),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ alertId: string }>(
     '*/alerts/:alertId/draft-runbook',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ alertId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -165,13 +179,13 @@ export const getPostAlertsBulkSnoozeMockHandler = (
   overrideResponse?:
     | AlertBulkSnoozeResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, AlertBulkSnoozeRequest>>[0]
       ) => Promise<AlertBulkSnoozeResponse> | AlertBulkSnoozeResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, AlertBulkSnoozeRequest>(
     '*/alerts/bulk-snooze',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, AlertBulkSnoozeRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

@@ -94,6 +94,7 @@ export const getGetTemplatesQueryOptions = <
 export type GetTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplates>>>;
 export type GetTemplatesQueryError = ErrorType<unknown>;
 
+/** @summary List templates */
 export function useGetTemplates<
   TData = Awaited<ReturnType<typeof getTemplates>>,
   TError = ErrorType<unknown>,
@@ -112,6 +113,7 @@ export function useGetTemplates<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List templates */
 export function useGetTemplates<
   TData = Awaited<ReturnType<typeof getTemplates>>,
   TError = ErrorType<unknown>,
@@ -130,6 +132,7 @@ export function useGetTemplates<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List templates */
 export function useGetTemplates<
   TData = Awaited<ReturnType<typeof getTemplates>>,
   TError = ErrorType<unknown>,
@@ -140,10 +143,7 @@ export function useGetTemplates<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List templates
- */
-
+/** @summary List templates */
 export function useGetTemplates<
   TData = Awaited<ReturnType<typeof getTemplates>>,
   TError = ErrorType<unknown>,
@@ -226,9 +226,7 @@ export type PostTemplatesMutationBody = BodyType<TemplateInput>;
 export type PostTemplatesMutationError = ErrorType<BadRequestResponse>;
 export type PostTemplatesMutationVariables = { data: BodyType<TemplateInput> };
 
-/**
- * @summary Create a template (editor+)
- */
+/** @summary Create a template (editor+) */
 export const usePostTemplates = <TError = ErrorType<BadRequestResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -300,6 +298,7 @@ export type GetTemplatesTemplateIdQueryResult = NonNullable<
 >;
 export type GetTemplatesTemplateIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One template */
 export function useGetTemplatesTemplateId<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -321,6 +320,7 @@ export function useGetTemplatesTemplateId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One template */
 export function useGetTemplatesTemplateId<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -342,6 +342,7 @@ export function useGetTemplatesTemplateId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One template */
 export function useGetTemplatesTemplateId<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -355,10 +356,7 @@ export function useGetTemplatesTemplateId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One template
- */
-
+/** @summary One template */
 export function useGetTemplatesTemplateId<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -450,9 +448,7 @@ export type PutTemplatesTemplateIdMutationVariables = {
   data: BodyType<TemplateInput>;
 };
 
-/**
- * @summary Update a template (editor+)
- */
+/** @summary Update a template (editor+) */
 export const usePutTemplatesTemplateId = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -537,6 +533,7 @@ export type DeleteTemplatesTemplateIdMutationError = ErrorType<
 export type DeleteTemplatesTemplateIdMutationVariables = { templateId: string };
 
 /**
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Delete a template (editor+)
  */
 export const useDeleteTemplatesTemplateId = <
@@ -636,6 +633,7 @@ export type PostTemplatesTemplateIdPreviewMutationVariables = {
 };
 
 /**
+ * Lists matching connectors and, when connectorId is supplied, renders a detailed preview. This operation does not create or update documents or versions.
  * @summary Preview this template's impact without persisting changes
  */
 export const usePostTemplatesTemplateIdPreview = <TError = ErrorType<unknown>, TContext = unknown>(
@@ -712,6 +710,7 @@ export type GetTemplatesTemplateIdVersionsQueryResult = NonNullable<
 >;
 export type GetTemplatesTemplateIdVersionsQueryError = ErrorType<unknown>;
 
+/** @summary Version history list for a template */
 export function useGetTemplatesTemplateIdVersions<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
   TError = ErrorType<unknown>,
@@ -733,6 +732,7 @@ export function useGetTemplatesTemplateIdVersions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Version history list for a template */
 export function useGetTemplatesTemplateIdVersions<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
   TError = ErrorType<unknown>,
@@ -754,6 +754,7 @@ export function useGetTemplatesTemplateIdVersions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Version history list for a template */
 export function useGetTemplatesTemplateIdVersions<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
   TError = ErrorType<unknown>,
@@ -767,10 +768,7 @@ export function useGetTemplatesTemplateIdVersions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Version history list for a template
- */
-
+/** @summary Version history list for a template */
 export function useGetTemplatesTemplateIdVersions<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersions>>,
   TError = ErrorType<unknown>,
@@ -851,6 +849,7 @@ export type GetTemplatesTemplateIdVersionsRevQueryResult = NonNullable<
 >;
 export type GetTemplatesTemplateIdVersionsRevQueryError = ErrorType<unknown>;
 
+/** @summary A specific template revision */
 export function useGetTemplatesTemplateIdVersionsRev<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -873,6 +872,7 @@ export function useGetTemplatesTemplateIdVersionsRev<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A specific template revision */
 export function useGetTemplatesTemplateIdVersionsRev<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -895,6 +895,7 @@ export function useGetTemplatesTemplateIdVersionsRev<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A specific template revision */
 export function useGetTemplatesTemplateIdVersionsRev<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -909,10 +910,7 @@ export function useGetTemplatesTemplateIdVersionsRev<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary A specific template revision
- */
-
+/** @summary A specific template revision */
 export function useGetTemplatesTemplateIdVersionsRev<
   TData = Awaited<ReturnType<typeof getTemplatesTemplateIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -1000,9 +998,7 @@ export type PostTemplatesTemplateIdVersionsRevRestoreMutationVariables = {
   rev: number;
 };
 
-/**
- * @summary Restore a past template revision as a new current version (editor+)
- */
+/** @summary Restore a past template revision as a new current version (editor+) */
 export const usePostTemplatesTemplateIdVersionsRevRestore = <
   TError = ErrorType<unknown>,
   TContext = unknown,

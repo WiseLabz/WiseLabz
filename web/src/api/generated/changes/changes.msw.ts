@@ -7,9 +7,16 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { AiSuggestRef, BulkResolveResponse, ChangeDetail, ChangePage } from '../../model';
+import type {
+  AiSuggestRef,
+  BulkResolveRequest,
+  BulkResolveResponse,
+  ChangeDetail,
+  ChangePage,
+  ResolveDocChange,
+} from '../../model';
 
 import {
   getGetChangesChangeIdResponseMock,
@@ -35,13 +42,12 @@ export {
 
 export const getGetChangesMockHandler = (
   overrideResponse?:
-    | ChangePage
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<ChangePage> | ChangePage),
+    ChangePage | ((info: Parameters<HttpResponseResolver>[0]) => Promise<ChangePage> | ChangePage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/changes',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -59,13 +65,13 @@ export const getGetChangesChangeIdMockHandler = (
   overrideResponse?:
     | ChangeDetail
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]
       ) => Promise<ChangeDetail> | ChangeDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ changeId: string }>(
     '*/changes/:changeId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -83,13 +89,13 @@ export const getPostChangesChangeIdAckMockHandler = (
   overrideResponse?:
     | ChangeDetail
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]
       ) => Promise<ChangeDetail> | ChangeDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ changeId: string }>(
     '*/changes/:changeId/ack',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -107,13 +113,13 @@ export const getPostChangesChangeIdDismissMockHandler = (
   overrideResponse?:
     | ChangeDetail
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]
       ) => Promise<ChangeDetail> | ChangeDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ changeId: string }>(
     '*/changes/:changeId/dismiss',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -131,13 +137,13 @@ export const getPostChangesChangeIdResolveDocMockHandler = (
   overrideResponse?:
     | ChangeDetail
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }, ResolveDocChange>>[0]
       ) => Promise<ChangeDetail> | ChangeDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ changeId: string }, ResolveDocChange>(
     '*/changes/:changeId/resolve-doc',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }, ResolveDocChange>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -155,13 +161,13 @@ export const getPostChangesBulkResolveMockHandler = (
   overrideResponse?:
     | BulkResolveResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, BulkResolveRequest>>[0]
       ) => Promise<BulkResolveResponse> | BulkResolveResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, BulkResolveRequest>(
     '*/changes/bulk-resolve',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, BulkResolveRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -179,13 +185,13 @@ export const getPostChangesChangeIdAiUpdateMockHandler = (
   overrideResponse?:
     | AiSuggestRef
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]
       ) => Promise<AiSuggestRef> | AiSuggestRef),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ changeId: string }>(
     '*/changes/:changeId/ai-update',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -203,13 +209,13 @@ export const getPostChangesChangeIdExplainMockHandler = (
   overrideResponse?:
     | ChangeDetail
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]
       ) => Promise<ChangeDetail> | ChangeDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ changeId: string }>(
     '*/changes/:changeId/explain',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ changeId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

@@ -97,6 +97,7 @@ export const getGetNotificationsQueryOptions = <
 export type GetNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof getNotifications>>>;
 export type GetNotificationsQueryError = ErrorType<UnauthorizedResponse>;
 
+/** @summary List the current user's in-app notifications */
 export function useGetNotifications<
   TData = Awaited<ReturnType<typeof getNotifications>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -116,6 +117,7 @@ export function useGetNotifications<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's in-app notifications */
 export function useGetNotifications<
   TData = Awaited<ReturnType<typeof getNotifications>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -135,6 +137,7 @@ export function useGetNotifications<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's in-app notifications */
 export function useGetNotifications<
   TData = Awaited<ReturnType<typeof getNotifications>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -146,10 +149,7 @@ export function useGetNotifications<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List the current user's in-app notifications
- */
-
+/** @summary List the current user's in-app notifications */
 export function useGetNotifications<
   TData = Awaited<ReturnType<typeof getNotifications>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -222,9 +222,7 @@ export type PostNotificationsReadAllMutationResult = NonNullable<
 
 export type PostNotificationsReadAllMutationError = ErrorType<UnauthorizedResponse>;
 
-/**
- * @summary Mark all of the current user's notifications as read
- */
+/** @summary Mark all of the current user's notifications as read */
 export const usePostNotificationsReadAll = <
   TError = ErrorType<UnauthorizedResponse>,
   TContext = unknown,
@@ -309,9 +307,7 @@ export type PostNotificationsNotificationIdReadMutationError = ErrorType<
 >;
 export type PostNotificationsNotificationIdReadMutationVariables = { notificationId: string };
 
-/**
- * @summary Mark one notification as read
- */
+/** @summary Mark one notification as read */
 export const usePostNotificationsNotificationIdRead = <
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
   TContext = unknown,
@@ -386,6 +382,7 @@ export type GetNotificationsDeliveriesQueryResult = NonNullable<
 >;
 export type GetNotificationsDeliveriesQueryError = ErrorType<UnauthorizedResponse>;
 
+/** @summary List per-channel notification delivery attempts — operator */
 export function useGetNotificationsDeliveries<
   TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -407,6 +404,7 @@ export function useGetNotificationsDeliveries<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List per-channel notification delivery attempts — operator */
 export function useGetNotificationsDeliveries<
   TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -428,6 +426,7 @@ export function useGetNotificationsDeliveries<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List per-channel notification delivery attempts — operator */
 export function useGetNotificationsDeliveries<
   TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -441,10 +440,7 @@ export function useGetNotificationsDeliveries<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List per-channel notification delivery attempts — operator
- */
-
+/** @summary List per-channel notification delivery attempts — operator */
 export function useGetNotificationsDeliveries<
   TData = Awaited<ReturnType<typeof getNotificationsDeliveries>>,
   TError = ErrorType<UnauthorizedResponse>,

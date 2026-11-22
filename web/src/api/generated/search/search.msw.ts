@@ -7,9 +7,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { DocBacklink, EntityDetail, EntityOverride, SearchResults } from '../../model';
+import type {
+  DocBacklink,
+  EntityDetail,
+  EntityOverride,
+  EntityOverrideCreate,
+  SearchResults,
+} from '../../model';
 
 import {
   getDeleteEntityOverridesIdResponseMock,
@@ -32,14 +38,12 @@ export {
 export const getGetSearchMockHandler = (
   overrideResponse?:
     | SearchResults
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<SearchResults> | SearchResults),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<SearchResults> | SearchResults),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/search',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -57,13 +61,13 @@ export const getGetEntitiesIdMockHandler = (
   overrideResponse?:
     | EntityDetail
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<EntityDetail> | EntityDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ id: string }>(
     '*/entities/:id',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -81,13 +85,13 @@ export const getGetEntitiesIdBacklinksMockHandler = (
   overrideResponse?:
     | DocBacklink[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<DocBacklink[]> | DocBacklink[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ id: string }>(
     '*/entities/:id/backlinks',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -104,14 +108,12 @@ export const getGetEntitiesIdBacklinksMockHandler = (
 export const getGetEntityOverridesMockHandler = (
   overrideResponse?:
     | EntityOverride[]
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<EntityOverride[]> | EntityOverride[]),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<EntityOverride[]> | EntityOverride[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/entity-overrides',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -129,13 +131,13 @@ export const getPostEntityOverridesMockHandler = (
   overrideResponse?:
     | EntityOverride
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, EntityOverrideCreate>>[0]
       ) => Promise<EntityOverride> | EntityOverride),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, EntityOverrideCreate>(
     '*/entity-overrides',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, EntityOverrideCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -153,13 +155,13 @@ export const getDeleteEntityOverridesIdMockHandler = (
   overrideResponse?:
     | EntityOverride
     | ((
-        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<EntityOverride> | EntityOverride),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ id: string }>(
     '*/entity-overrides/:id',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

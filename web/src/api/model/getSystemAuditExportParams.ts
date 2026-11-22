@@ -10,20 +10,12 @@ import type { GetSystemAuditExportFormat } from './getSystemAuditExportFormat';
 
 export type GetSystemAuditExportParams = {
   format?: GetSystemAuditExportFormat;
-  /**
-   * Exact match, e.g. `connector.create`
-   */
+  /** Exact match, e.g. `connector.create` */
   action?: string;
-  /**
-   * Exact match, e.g. `connector`, `doc`
-   */
+  /** Exact match, e.g. `connector`, `doc` */
   targetType?: string;
-  /**
-   * Only records with createdAt >= this RFC3339 timestamp
-   */
+  /** Only records with createdAt >= this RFC3339 timestamp */
   createdAfter?: string;
-  /**
-   * Only records with createdAt <= this RFC3339 timestamp
-   */
+  /** Only records with createdAt <= this RFC3339 timestamp */
   createdBefore?: string;
 };

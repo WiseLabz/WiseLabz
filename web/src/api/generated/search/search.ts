@@ -98,6 +98,10 @@ export const getGetSearchQueryOptions = <
 export type GetSearchQueryResult = NonNullable<Awaited<ReturnType<typeof getSearch>>>;
 export type GetSearchQueryError = ErrorType<Error>;
 
+/**
+ * Results are grouped and independently limited. Connector grants and API-key restrictions apply to docs and entities, including for admins. Runbooks are global and excluded by connector or kind filters; kind selects only entities.
+ * @summary Search docs, runbooks, and connector entities
+ */
 export function useGetSearch<
   TData = Awaited<ReturnType<typeof getSearch>>,
   TError = ErrorType<Error>,
@@ -117,6 +121,10 @@ export function useGetSearch<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Results are grouped and independently limited. Connector grants and API-key restrictions apply to docs and entities, including for admins. Runbooks are global and excluded by connector or kind filters; kind selects only entities.
+ * @summary Search docs, runbooks, and connector entities
+ */
 export function useGetSearch<
   TData = Awaited<ReturnType<typeof getSearch>>,
   TError = ErrorType<Error>,
@@ -136,6 +144,10 @@ export function useGetSearch<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Results are grouped and independently limited. Connector grants and API-key restrictions apply to docs and entities, including for admins. Runbooks are global and excluded by connector or kind filters; kind selects only entities.
+ * @summary Search docs, runbooks, and connector entities
+ */
 export function useGetSearch<
   TData = Awaited<ReturnType<typeof getSearch>>,
   TError = ErrorType<Error>,
@@ -148,9 +160,9 @@ export function useGetSearch<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Results are grouped and independently limited. Connector grants and API-key restrictions apply to docs and entities, including for admins. Runbooks are global and excluded by connector or kind filters; kind selects only entities.
  * @summary Search docs, runbooks, and connector entities
  */
-
 export function useGetSearch<
   TData = Awaited<ReturnType<typeof getSearch>>,
   TError = ErrorType<Error>,
@@ -221,6 +233,14 @@ export const getGetEntitiesIdQueryOptions = <
 export type GetEntitiesIdQueryResult = NonNullable<Awaited<ReturnType<typeof getEntitiesId>>>;
 export type GetEntitiesIdQueryError = ErrorType<Error>;
 
+/**
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from one active visible member (a gone member only when none is active), preferring a non-empty name, then the lowest name (or ref when nameless), connector ID, kind and ref; the topology graph names identity nodes the same way. `neighbors` and `relatedByIp` list edges whose near end is an active visible member and whose far end is on any connector the caller can view (not only member connectors), de-duplicated; an identity is never related by IP to itself. `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
+ * @summary Get a visible entity identity and its related topology
+ */
 export function useGetEntitiesId<
   TData = Awaited<ReturnType<typeof getEntitiesId>>,
   TError = ErrorType<Error>,
@@ -240,6 +260,14 @@ export function useGetEntitiesId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from one active visible member (a gone member only when none is active), preferring a non-empty name, then the lowest name (or ref when nameless), connector ID, kind and ref; the topology graph names identity nodes the same way. `neighbors` and `relatedByIp` list edges whose near end is an active visible member and whose far end is on any connector the caller can view (not only member connectors), de-duplicated; an identity is never related by IP to itself. `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
+ * @summary Get a visible entity identity and its related topology
+ */
 export function useGetEntitiesId<
   TData = Awaited<ReturnType<typeof getEntitiesId>>,
   TError = ErrorType<Error>,
@@ -259,6 +287,14 @@ export function useGetEntitiesId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from one active visible member (a gone member only when none is active), preferring a non-empty name, then the lowest name (or ref when nameless), connector ID, kind and ref; the topology graph names identity nodes the same way. `neighbors` and `relatedByIp` list edges whose near end is an active visible member and whose far end is on any connector the caller can view (not only member connectors), de-duplicated; an identity is never related by IP to itself. `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
+ * @summary Get a visible entity identity and its related topology
+ */
 export function useGetEntitiesId<
   TData = Awaited<ReturnType<typeof getEntitiesId>>,
   TError = ErrorType<Error>,
@@ -271,9 +307,13 @@ export function useGetEntitiesId<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Returns 404 unless the caller can view at least one member connector; a malformed id, an unknown id, a redirect loop and a missing grant all return the identical 404. Instance admins get no implicit access. All connector-derived fields are filtered by viewer grants and API-key restrictions.
+ *
+ * `kind` and `name` come from one active visible member (a gone member only when none is active), preferring a non-empty name, then the lowest name (or ref when nameless), connector ID, kind and ref; the topology graph names identity nodes the same way. `neighbors` and `relatedByIp` list edges whose near end is an active visible member and whose far end is on any connector the caller can view (not only member connectors), de-duplicated; an identity is never related by IP to itself. `members` lists every visible member, active first, with `goneAt` on departed ones. `neighbors`, `relatedByIp`, `findings`, `onReportingConnectors` and `runbooks` only consider active visible members and are capped (200 edges, 50 findings, 100 runbook steps). `findings` and `onReportingConnectors` contain open findings only.
+ *
+ * `history` is derived from snapshot diffs: for each visible member connector the 30 most recent snapshots are compared pairwise, and at most 100 changes are returned, newest first. `at` is the fetch time of the newer snapshot of the pair, `old` the value in the older snapshot and `new` the value in the newer one.
  * @summary Get a visible entity identity and its related topology
  */
-
 export function useGetEntitiesId<
   TData = Awaited<ReturnType<typeof getEntitiesId>>,
   TError = ErrorType<Error>,
@@ -347,6 +387,10 @@ export type GetEntitiesIdBacklinksQueryResult = NonNullable<
 >;
 export type GetEntitiesIdBacklinksQueryError = ErrorType<Error>;
 
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this entity
+ */
 export function useGetEntitiesIdBacklinks<
   TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -368,6 +412,10 @@ export function useGetEntitiesIdBacklinks<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this entity
+ */
 export function useGetEntitiesIdBacklinks<
   TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -389,6 +437,10 @@ export function useGetEntitiesIdBacklinks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this entity
+ */
 export function useGetEntitiesIdBacklinks<
   TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -403,9 +455,9 @@ export function useGetEntitiesIdBacklinks<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
  * @summary List visible docs referencing this entity
  */
-
 export function useGetEntitiesIdBacklinks<
   TData = Awaited<ReturnType<typeof getEntitiesIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -472,6 +524,10 @@ export type GetEntityOverridesQueryResult = NonNullable<
 >;
 export type GetEntityOverridesQueryError = ErrorType<ForbiddenResponse>;
 
+/**
+ * Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
+ * @summary List manual entity identity overrides (instance admins only)
+ */
 export function useGetEntityOverrides<
   TData = Awaited<ReturnType<typeof getEntityOverrides>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -490,6 +546,10 @@ export function useGetEntityOverrides<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
+ * @summary List manual entity identity overrides (instance admins only)
+ */
 export function useGetEntityOverrides<
   TData = Awaited<ReturnType<typeof getEntityOverrides>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -510,6 +570,10 @@ export function useGetEntityOverrides<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
+ * @summary List manual entity identity overrides (instance admins only)
+ */
 export function useGetEntityOverrides<
   TData = Awaited<ReturnType<typeof getEntityOverrides>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -521,9 +585,9 @@ export function useGetEntityOverrides<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Returns every override, oldest first, unfiltered by connector grants. `state` is `active` when every referenced member is currently observed, otherwise `dormant`; a dormant override applies again when the member returns. Each member carries the identity ID it belongs to now (merge redirects resolved), empty when the member has no stored membership.
  * @summary List manual entity identity overrides (instance admins only)
  */
-
 export function useGetEntityOverrides<
   TData = Awaited<ReturnType<typeof getEntityOverrides>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -612,6 +676,7 @@ export type PostEntityOverridesMutationError = ErrorType<
 export type PostEntityOverridesMutationVariables = { data: BodyType<EntityOverrideCreate> };
 
 /**
+ * Stores the override and reconciles identities before responding. The response lists the identity ID each member now belongs to; after a detach, the old identity ID stays with whichever resulting cluster wins the usual tie-break, so clients must use the returned IDs. 400 when a member has never been recorded, a merge names the same member twice or members of different kinds, the action or a required field is invalid, or the note exceeds 1000 characters. 409 when an equivalent override exists (a merge of A with B equals a merge of B with A). Recorded in the audit log as `entity.override.create`.
  * @summary Detach an entity member or merge two members (instance admins only)
  */
 export const usePostEntityOverrides = <
@@ -697,6 +762,7 @@ export type DeleteEntityOverridesIdMutationError = ErrorType<ForbiddenResponse |
 export type DeleteEntityOverridesIdMutationVariables = { id: string };
 
 /**
+ * Removes the override and reconciles identities before responding, restoring the automatic result. Returns the removed override with the identity ID each member now belongs to. Recorded in the audit log as `entity.override.delete`.
  * @summary Remove an entity identity override (instance admins only)
  */
 export const useDeleteEntityOverridesId = <

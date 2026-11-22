@@ -11,17 +11,13 @@ import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetAttentionParams = {
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1
    * @maximum 100
    */
   pageSize?: PageSizeParameter;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   days?: DaysQueryParameter;
 };

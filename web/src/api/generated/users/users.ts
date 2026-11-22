@@ -91,6 +91,7 @@ export const getGetUsersQueryOptions = <
 export type GetUsersQueryResult = NonNullable<Awaited<ReturnType<typeof getUsers>>>;
 export type GetUsersQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary List users (operator) */
 export function useGetUsers<
   TData = Awaited<ReturnType<typeof getUsers>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -109,6 +110,7 @@ export function useGetUsers<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List users (operator) */
 export function useGetUsers<
   TData = Awaited<ReturnType<typeof getUsers>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -127,6 +129,7 @@ export function useGetUsers<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List users (operator) */
 export function useGetUsers<
   TData = Awaited<ReturnType<typeof getUsers>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -137,10 +140,7 @@ export function useGetUsers<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List users (operator)
- */
-
+/** @summary List users (operator) */
 export function useGetUsers<
   TData = Awaited<ReturnType<typeof getUsers>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -225,6 +225,7 @@ export type PostUsersMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostUsersMutationVariables = { data: BodyType<UserCreate> };
 
 /**
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.create`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Create / invite a user (operator)
  */
 export const usePostUsers = <TError = ErrorType<Error | ForbiddenResponse>, TContext = unknown>(
@@ -314,6 +315,7 @@ export type PatchUsersUserIdMutationError = ErrorType<Error | ForbiddenResponse>
 export type PatchUsersUserIdMutationVariables = { userId: string; data: BodyType<UserUpdate> };
 
 /**
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `user.update`, issued with this user's ID as `target`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Update a user's role or status (operator)
  */
 export const usePatchUsersUserId = <
@@ -398,6 +400,7 @@ export type DeleteUsersUserIdMutationError = ErrorType<
 export type DeleteUsersUserIdMutationVariables = { userId: string };
 
 /**
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Delete a user (operator)
  */
 export const useDeleteUsersUserId = <
@@ -486,6 +489,7 @@ export type PostUsersUserIdResetPasswordMutationError = ErrorType<
 export type PostUsersUserIdResetPasswordMutationVariables = { userId: string };
 
 /**
+ * Destructive. When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Operator-triggered password reset
  */
 export const usePostUsersUserIdResetPassword = <
@@ -575,6 +579,7 @@ export type PostUsersUserIdResetMfaMutationError = ErrorType<
 export type PostUsersUserIdResetMfaMutationVariables = { userId: string };
 
 /**
+ * Destructive. Deletes every factor and recovery code, revokes every session, and is audited (#279). When `stepUpForDestructive` is enabled, requires a valid `X-Elevation-Token` from POST /auth/elevate; missing tokens get a 400 `elevation_required`, and invalid or expired tokens get a 401 `unauthorized`.
  * @summary Reset a user's two-factor authentication (operator)
  */
 export const usePostUsersUserIdResetMfa = <

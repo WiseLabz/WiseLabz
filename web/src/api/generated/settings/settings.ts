@@ -117,6 +117,10 @@ export const getGetAuthConfigQueryOptions = <
 export type GetAuthConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthConfig>>>;
 export type GetAuthConfigQueryError = ErrorType<ForbiddenResponse>;
 
+/**
+ * OIDC providers are defined entirely in config file / env (decision: hybrid-C strict). This endpoint returns provider metadata for display only — issuer, clientId, and secret are never writable via the API and the secret is never returned (`secretConfigured` reflects presence). Only the toggles below are mutable.
+ * @summary Auth config — operator (read-only view)
+ */
 export function useGetAuthConfig<
   TData = Awaited<ReturnType<typeof getAuthConfig>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -135,6 +139,10 @@ export function useGetAuthConfig<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * OIDC providers are defined entirely in config file / env (decision: hybrid-C strict). This endpoint returns provider metadata for display only — issuer, clientId, and secret are never writable via the API and the secret is never returned (`secretConfigured` reflects presence). Only the toggles below are mutable.
+ * @summary Auth config — operator (read-only view)
+ */
 export function useGetAuthConfig<
   TData = Awaited<ReturnType<typeof getAuthConfig>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -153,6 +161,10 @@ export function useGetAuthConfig<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * OIDC providers are defined entirely in config file / env (decision: hybrid-C strict). This endpoint returns provider metadata for display only — issuer, clientId, and secret are never writable via the API and the secret is never returned (`secretConfigured` reflects presence). Only the toggles below are mutable.
+ * @summary Auth config — operator (read-only view)
+ */
 export function useGetAuthConfig<
   TData = Awaited<ReturnType<typeof getAuthConfig>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -164,9 +176,9 @@ export function useGetAuthConfig<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * OIDC providers are defined entirely in config file / env (decision: hybrid-C strict). This endpoint returns provider metadata for display only — issuer, clientId, and secret are never writable via the API and the secret is never returned (`secretConfigured` reflects presence). Only the toggles below are mutable.
  * @summary Auth config — operator (read-only view)
  */
-
 export function useGetAuthConfig<
   TData = Awaited<ReturnType<typeof getAuthConfig>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -251,6 +263,7 @@ export type PutAuthConfigMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PutAuthConfigMutationVariables = { data: BodyType<AuthSettingsUpdate> };
 
 /**
+ * Cannot create/edit OIDC providers or touch any credential. Accepts only local-login enablement and token lifetimes. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authConfig.update`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Update mutable auth settings — operator (toggles + token TTLs only)
  */
 export const usePutAuthConfig = <TError = ErrorType<Error | ForbiddenResponse>, TContext = unknown>(
@@ -347,6 +360,7 @@ export type PutAuthProvidersProviderIdEnabledMutationVariables = {
 };
 
 /**
+ * The only per-provider mutation exposed. Persists an enable/disable flag in the app DB; the provider definition itself stays in config/env. When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `authProvider.toggle`, issued with the provider ID as `target`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`.
  * @summary Enable/disable a file-defined OIDC provider — operator
  */
 export const usePutAuthProvidersProviderIdEnabled = <
@@ -409,6 +423,7 @@ export const getGetAiConfigQueryOptions = <
 export type GetAiConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getAiConfig>>>;
 export type GetAiConfigQueryError = ErrorType<unknown>;
 
+/** @summary AI module config — admin */
 export function useGetAiConfig<
   TData = Awaited<ReturnType<typeof getAiConfig>>,
   TError = ErrorType<unknown>,
@@ -427,6 +442,7 @@ export function useGetAiConfig<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary AI module config — admin */
 export function useGetAiConfig<
   TData = Awaited<ReturnType<typeof getAiConfig>>,
   TError = ErrorType<unknown>,
@@ -445,6 +461,7 @@ export function useGetAiConfig<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary AI module config — admin */
 export function useGetAiConfig<
   TData = Awaited<ReturnType<typeof getAiConfig>>,
   TError = ErrorType<unknown>,
@@ -455,10 +472,7 @@ export function useGetAiConfig<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary AI module config — admin
- */
-
+/** @summary AI module config — admin */
 export function useGetAiConfig<
   TData = Awaited<ReturnType<typeof getAiConfig>>,
   TError = ErrorType<unknown>,
@@ -541,9 +555,7 @@ export type PutAiConfigMutationBody = BodyType<AiConfig>;
 export type PutAiConfigMutationError = ErrorType<unknown>;
 export type PutAiConfigMutationVariables = { data: BodyType<AiConfig> };
 
-/**
- * @summary Update AI module config — admin
- */
+/** @summary Update AI module config — admin */
 export const usePutAiConfig = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -607,9 +619,7 @@ export type PostAiConfigTestMutationResult = NonNullable<
 
 export type PostAiConfigTestMutationError = ErrorType<unknown>;
 
-/**
- * @summary Test the AI provider connection — admin
- */
+/** @summary Test the AI provider connection — admin */
 export const usePostAiConfigTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -670,6 +680,7 @@ export type GetAiConfigFallbackProvidersQueryResult = NonNullable<
 >;
 export type GetAiConfigFallbackProvidersQueryError = ErrorType<unknown>;
 
+/** @summary Ordered fallback providers, tried in order after the primary provider fails — admin */
 export function useGetAiConfigFallbackProviders<
   TData = Awaited<ReturnType<typeof getAiConfigFallbackProviders>>,
   TError = ErrorType<unknown>,
@@ -690,6 +701,7 @@ export function useGetAiConfigFallbackProviders<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Ordered fallback providers, tried in order after the primary provider fails — admin */
 export function useGetAiConfigFallbackProviders<
   TData = Awaited<ReturnType<typeof getAiConfigFallbackProviders>>,
   TError = ErrorType<unknown>,
@@ -710,6 +722,7 @@ export function useGetAiConfigFallbackProviders<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Ordered fallback providers, tried in order after the primary provider fails — admin */
 export function useGetAiConfigFallbackProviders<
   TData = Awaited<ReturnType<typeof getAiConfigFallbackProviders>>,
   TError = ErrorType<unknown>,
@@ -722,10 +735,7 @@ export function useGetAiConfigFallbackProviders<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Ordered fallback providers, tried in order after the primary provider fails — admin
- */
-
+/** @summary Ordered fallback providers, tried in order after the primary provider fails — admin */
 export function useGetAiConfigFallbackProviders<
   TData = Awaited<ReturnType<typeof getAiConfigFallbackProviders>>,
   TError = ErrorType<unknown>,
@@ -815,9 +825,7 @@ export type PutAiConfigFallbackProvidersMutationVariables = {
   data: BodyType<AiFallbackProvider[]>;
 };
 
-/**
- * @summary Replace the whole ordered fallback provider list — admin
- */
+/** @summary Replace the whole ordered fallback provider list — admin */
 export const usePutAiConfigFallbackProviders = <
   TError = ErrorType<BadRequestResponse>,
   TContext = unknown,
@@ -885,6 +893,7 @@ export type GetNotificationsConfigQueryResult = NonNullable<
 >;
 export type GetNotificationsConfigQueryError = ErrorType<unknown>;
 
+/** @summary Notification channels + event×channel routing matrix — admin */
 export function useGetNotificationsConfig<
   TData = Awaited<ReturnType<typeof getNotificationsConfig>>,
   TError = ErrorType<unknown>,
@@ -905,6 +914,7 @@ export function useGetNotificationsConfig<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Notification channels + event×channel routing matrix — admin */
 export function useGetNotificationsConfig<
   TData = Awaited<ReturnType<typeof getNotificationsConfig>>,
   TError = ErrorType<unknown>,
@@ -925,6 +935,7 @@ export function useGetNotificationsConfig<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Notification channels + event×channel routing matrix — admin */
 export function useGetNotificationsConfig<
   TData = Awaited<ReturnType<typeof getNotificationsConfig>>,
   TError = ErrorType<unknown>,
@@ -937,10 +948,7 @@ export function useGetNotificationsConfig<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Notification channels + event×channel routing matrix — admin
- */
-
+/** @summary Notification channels + event×channel routing matrix — admin */
 export function useGetNotificationsConfig<
   TData = Awaited<ReturnType<typeof getNotificationsConfig>>,
   TError = ErrorType<unknown>,
@@ -1029,9 +1037,7 @@ export type PutNotificationsConfigMutationVariables = {
   data: BodyType<NonReadonly<NotificationConfig>>;
 };
 
-/**
- * @summary Update notification config — admin
- */
+/** @summary Update notification config — admin */
 export const usePutNotificationsConfig = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -1119,9 +1125,7 @@ export type PostNotificationsConfigTestMutationVariables = {
   data: BodyType<PostNotificationsConfigTestBody>;
 };
 
-/**
- * @summary Send a test notification on a channel — admin
- */
+/** @summary Send a test notification on a channel — admin */
 export const usePostNotificationsConfigTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<

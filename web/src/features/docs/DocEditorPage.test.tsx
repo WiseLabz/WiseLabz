@@ -56,7 +56,7 @@ const server = setupServer(
 );
 const lockRequest = vi.fn();
 const releaseRequest = vi.fn();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   vi.clearAllMocks();
   useLive.setState({ docLocks: {} });
@@ -269,7 +269,7 @@ describe('DocEditorPage', () => {
   });
 
   it('stops editing when renewal fails and preserves the draft for retry', async () => {
-    const { editor } = await renderEditor();
+    const { editor, unmount } = await renderEditor();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await startEditing();
     fireEvent.change(editor, { target: { value: '# Local draft' } });
@@ -281,6 +281,8 @@ describe('DocEditorPage', () => {
     server.use(http.post('*/docs/:docId/lock', () => HttpResponse.json({})));
     await startEditing();
     expect(editor).toHaveValue('# Local draft');
+    unmount();
+    await waitFor(() => expect(releaseRequest).toHaveBeenCalled());
   });
 
   it('does not release its lock when the draft changes, and releases on unmount', async () => {

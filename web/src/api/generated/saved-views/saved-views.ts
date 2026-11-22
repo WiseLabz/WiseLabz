@@ -97,6 +97,7 @@ export const getGetSavedViewsQueryOptions = <
 export type GetSavedViewsQueryResult = NonNullable<Awaited<ReturnType<typeof getSavedViews>>>;
 export type GetSavedViewsQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
 
+/** @summary List the current user's saved views for one list surface (docs/SAVED_VIEWS.md) */
 export function useGetSavedViews<
   TData = Awaited<ReturnType<typeof getSavedViews>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -116,6 +117,7 @@ export function useGetSavedViews<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's saved views for one list surface (docs/SAVED_VIEWS.md) */
 export function useGetSavedViews<
   TData = Awaited<ReturnType<typeof getSavedViews>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -135,6 +137,7 @@ export function useGetSavedViews<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the current user's saved views for one list surface (docs/SAVED_VIEWS.md) */
 export function useGetSavedViews<
   TData = Awaited<ReturnType<typeof getSavedViews>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -146,10 +149,7 @@ export function useGetSavedViews<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List the current user's saved views for one list surface (docs/SAVED_VIEWS.md)
- */
-
+/** @summary List the current user's saved views for one list surface (docs/SAVED_VIEWS.md) */
 export function useGetSavedViews<
   TData = Awaited<ReturnType<typeof getSavedViews>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -233,9 +233,7 @@ export type PostSavedViewsMutationBody = BodyType<SavedViewCreate>;
 export type PostSavedViewsMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
 export type PostSavedViewsMutationVariables = { data: BodyType<SavedViewCreate> };
 
-/**
- * @summary Save the current filter state of a list surface under a name
- */
+/** @summary Save the current filter state of a list surface under a name */
 export const usePostSavedViews = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
   TContext = unknown,
@@ -320,9 +318,7 @@ export type DeleteSavedViewsSavedViewIdMutationError = ErrorType<
 >;
 export type DeleteSavedViewsSavedViewIdMutationVariables = { savedViewId: string };
 
-/**
- * @summary Delete one of the current user's saved views
- */
+/** @summary Delete one of the current user's saved views */
 export const useDeleteSavedViewsSavedViewId = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,

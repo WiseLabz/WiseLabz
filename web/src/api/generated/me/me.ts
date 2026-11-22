@@ -99,6 +99,7 @@ export const getGetMeQueryOptions = <
 export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>;
 export type GetMeQueryError = ErrorType<UnauthorizedResponse>;
 
+/** @summary Current authenticated user */
 export function useGetMe<
   TData = Awaited<ReturnType<typeof getMe>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -117,6 +118,7 @@ export function useGetMe<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current authenticated user */
 export function useGetMe<
   TData = Awaited<ReturnType<typeof getMe>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -135,6 +137,7 @@ export function useGetMe<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current authenticated user */
 export function useGetMe<
   TData = Awaited<ReturnType<typeof getMe>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -145,10 +148,7 @@ export function useGetMe<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Current authenticated user
- */
-
+/** @summary Current authenticated user */
 export function useGetMe<
   TData = Awaited<ReturnType<typeof getMe>>,
   TError = ErrorType<UnauthorizedResponse>,
@@ -231,9 +231,7 @@ export type PatchMeMutationBody = BodyType<ProfileUpdate>;
 export type PatchMeMutationError = ErrorType<unknown>;
 export type PatchMeMutationVariables = { data: BodyType<ProfileUpdate> };
 
-/**
- * @summary Update own profile (display name, email)
- */
+/** @summary Update own profile (display name, email) */
 export const usePatchMe = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -316,9 +314,7 @@ export type PostMePasswordMutationBody = BodyType<PasswordChange>;
 export type PostMePasswordMutationError = ErrorType<BadRequestResponse | void>;
 export type PostMePasswordMutationVariables = { data: BodyType<PasswordChange> };
 
-/**
- * @summary Change own password (local accounts only)
- */
+/** @summary Change own password (local accounts only) */
 export const usePostMePassword = <
   TError = ErrorType<BadRequestResponse | void>,
   TContext = unknown,
@@ -379,6 +375,7 @@ export const getGetMeSessionsQueryOptions = <
 export type GetMeSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMeSessions>>>;
 export type GetMeSessionsQueryError = ErrorType<unknown>;
 
+/** @summary List own active sessions */
 export function useGetMeSessions<
   TData = Awaited<ReturnType<typeof getMeSessions>>,
   TError = ErrorType<unknown>,
@@ -397,6 +394,7 @@ export function useGetMeSessions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List own active sessions */
 export function useGetMeSessions<
   TData = Awaited<ReturnType<typeof getMeSessions>>,
   TError = ErrorType<unknown>,
@@ -415,6 +413,7 @@ export function useGetMeSessions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List own active sessions */
 export function useGetMeSessions<
   TData = Awaited<ReturnType<typeof getMeSessions>>,
   TError = ErrorType<unknown>,
@@ -425,10 +424,7 @@ export function useGetMeSessions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List own active sessions
- */
-
+/** @summary List own active sessions */
 export function useGetMeSessions<
   TData = Awaited<ReturnType<typeof getMeSessions>>,
   TError = ErrorType<unknown>,
@@ -507,9 +503,7 @@ export type DeleteMeSessionsSessionIdMutationResult = NonNullable<
 export type DeleteMeSessionsSessionIdMutationError = ErrorType<unknown>;
 export type DeleteMeSessionsSessionIdMutationVariables = { sessionId: string };
 
-/**
- * @summary Revoke one of own sessions
- */
+/** @summary Revoke one of own sessions */
 export const useDeleteMeSessionsSessionId = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -567,6 +561,7 @@ export const getGetMeMfaQueryOptions = <
 export type GetMeMfaQueryResult = NonNullable<Awaited<ReturnType<typeof getMeMfa>>>;
 export type GetMeMfaQueryError = ErrorType<BadRequestResponse>;
 
+/** @summary List own MFA factors, recovery codes remaining, and whether 2FA is required */
 export function useGetMeMfa<
   TData = Awaited<ReturnType<typeof getMeMfa>>,
   TError = ErrorType<BadRequestResponse>,
@@ -585,6 +580,7 @@ export function useGetMeMfa<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List own MFA factors, recovery codes remaining, and whether 2FA is required */
 export function useGetMeMfa<
   TData = Awaited<ReturnType<typeof getMeMfa>>,
   TError = ErrorType<BadRequestResponse>,
@@ -603,6 +599,7 @@ export function useGetMeMfa<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List own MFA factors, recovery codes remaining, and whether 2FA is required */
 export function useGetMeMfa<
   TData = Awaited<ReturnType<typeof getMeMfa>>,
   TError = ErrorType<BadRequestResponse>,
@@ -613,10 +610,7 @@ export function useGetMeMfa<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List own MFA factors, recovery codes remaining, and whether 2FA is required
- */
-
+/** @summary List own MFA factors, recovery codes remaining, and whether 2FA is required */
 export function useGetMeMfa<
   TData = Awaited<ReturnType<typeof getMeMfa>>,
   TError = ErrorType<BadRequestResponse>,
@@ -701,6 +695,7 @@ export type PostMeMfaTotpMutationError = ErrorType<Error | UnauthorizedResponse 
 export type PostMeMfaTotpMutationVariables = { data?: BodyType<PostMeMfaTotpBody> };
 
 /**
+ * Creates a pending factor (unusable for login/step-up until confirmed). The frontend renders `otpauthUrl` as a QR code client-side. Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. Elevation is required regardless of the step-up setting: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`; 403 for API keys.
  * @summary Begin enrolling a TOTP factor
  */
 export const usePostMeMfaTotp = <
@@ -799,6 +794,7 @@ export type PostMeMfaTotpFactorIdConfirmMutationVariables = {
 };
 
 /**
+ * On the user's first confirmed factor, also returns freshly generated recovery codes (shown once). If the caller's session was enrollment-only, also returns a fresh, fully-privileged token pair.
  * @summary Confirm a pending TOTP factor with a code
  */
 export const usePostMeMfaTotpFactorIdConfirm = <
@@ -896,6 +892,7 @@ export type PostMeMfaWebauthnRegisterBeginMutationVariables = {
 };
 
 /**
+ * Requires step-up elevation (action `mfa.manage`; a user with no factor elevates with their password), except for sessions confined to forced MFA enrollment. Elevation is required regardless of the step-up setting: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`; 403 for API keys.
  * @summary Begin registering a security key or passkey
  */
 export const usePostMeMfaWebauthnRegisterBegin = <
@@ -986,9 +983,7 @@ export type PostMeMfaWebauthnRegisterFinishMutationBody = BodyType<WebAuthnRespo
 export type PostMeMfaWebauthnRegisterFinishMutationError = ErrorType<UnauthorizedResponse | void>;
 export type PostMeMfaWebauthnRegisterFinishMutationVariables = { data: BodyType<WebAuthnResponse> };
 
-/**
- * @summary Finish registering a security key or passkey
- */
+/** @summary Finish registering a security key or passkey */
 export const usePostMeMfaWebauthnRegisterFinish = <
   TError = ErrorType<UnauthorizedResponse | void>,
   TContext = unknown,
@@ -1070,6 +1065,7 @@ export type PostMeMfaRecoveryCodesMutationError = ErrorType<
 >;
 
 /**
+ * Requires step-up elevation (action `mfa.manage`), always, regardless of the step-up setting: 400 `elevation_required` when the token is missing, 401 `unauthorized` when it is invalid, expired, already used or issued for a different action or session. 403 for API keys.
  * @summary Regenerate recovery codes
  */
 export const usePostMeMfaRecoveryCodes = <
@@ -1160,6 +1156,7 @@ export type DeleteMeMfaFactorsFactorIdMutationError = ErrorType<
 export type DeleteMeMfaFactorsFactorIdMutationVariables = { factorId: string };
 
 /**
+ * Requires step-up elevation (action `mfa.manage`), always, regardless of the step-up setting: 400 `elevation_required` when the token is missing, 401 `unauthorized` when it is invalid, expired, already used or issued for a different action or session. 403 for API keys. Refused with 409 `mfa_required_by_policy` when this is the last factor and the require_2fa policy still covers this user. Removing the last factor also wipes recovery codes.
  * @summary Remove one of own MFA factors
  */
 export const useDeleteMeMfaFactorsFactorId = <

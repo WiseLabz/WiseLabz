@@ -7,7 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, RequestHandlerOptions } from 'msw';
 
 import type { AttentionPage } from '../../model';
 
@@ -18,14 +18,12 @@ export { getGetAttentionResponseMock } from './attention.faker';
 export const getGetAttentionMockHandler = (
   overrideResponse?:
     | AttentionPage
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<AttentionPage> | AttentionPage),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AttentionPage> | AttentionPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/attention',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

@@ -7,7 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, RequestHandlerOptions } from 'msw';
 
 import type { GetTopologyPath200, TopologyGraph } from '../../model';
 
@@ -19,13 +19,13 @@ export const getGetTopologyPathMockHandler = (
   overrideResponse?:
     | GetTopologyPath200
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<GetTopologyPath200> | GetTopologyPath200),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/topology/path',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -42,14 +42,12 @@ export const getGetTopologyPathMockHandler = (
 export const getGetTopologyGraphMockHandler = (
   overrideResponse?:
     | TopologyGraph
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<TopologyGraph> | TopologyGraph),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<TopologyGraph> | TopologyGraph),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/topology/graph',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

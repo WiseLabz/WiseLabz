@@ -7,10 +7,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   ComplianceRule,
+  ComplianceRuleInput,
   ComplianceRulePackInstallResult,
   ComplianceRulePackPage,
   ComplianceRulePage,
@@ -43,14 +44,12 @@ export {
 export const getGetComplianceSchemaMockHandler = (
   overrideResponse?:
     | ComplianceSchema
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<ComplianceSchema> | ComplianceSchema),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<ComplianceSchema> | ComplianceSchema),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/compliance/schema',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -68,13 +67,13 @@ export const getGetComplianceRulesMockHandler = (
   overrideResponse?:
     | ComplianceRulePage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<ComplianceRulePage> | ComplianceRulePage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/compliance/rules',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -92,13 +91,13 @@ export const getPostComplianceRulesMockHandler = (
   overrideResponse?:
     | ComplianceRule
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ComplianceRuleInput>>[0]
       ) => Promise<ComplianceRule> | ComplianceRule),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ComplianceRuleInput>(
     '*/compliance/rules',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ComplianceRuleInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -116,13 +115,13 @@ export const getGetComplianceRulesIdMockHandler = (
   overrideResponse?:
     | ComplianceRule
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<ComplianceRule> | ComplianceRule),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ id: string }>(
     '*/compliance/rules/:id',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -140,13 +139,13 @@ export const getPutComplianceRulesIdMockHandler = (
   overrideResponse?:
     | ComplianceRule
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }, ComplianceRuleInput>>[0]
       ) => Promise<ComplianceRule> | ComplianceRule),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ id: string }, ComplianceRuleInput>(
     '*/compliance/rules/:id',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }, ComplianceRuleInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -162,12 +161,12 @@ export const getPutComplianceRulesIdMockHandler = (
 
 export const getDeleteComplianceRulesIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ id: string }>(
     '*/compliance/rules/:id',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -182,13 +181,13 @@ export const getPostComplianceRulesTestMockHandler = (
   overrideResponse?:
     | ComplianceRuleTestResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ComplianceRuleInput>>[0]
       ) => Promise<ComplianceRuleTestResult> | ComplianceRuleTestResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ComplianceRuleInput>(
     '*/compliance/rules/test',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ComplianceRuleInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -206,13 +205,13 @@ export const getGetCompliancePacksMockHandler = (
   overrideResponse?:
     | ComplianceRulePackPage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<ComplianceRulePackPage> | ComplianceRulePackPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/compliance/packs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -230,13 +229,13 @@ export const getPostCompliancePacksIdInstallMockHandler = (
   overrideResponse?:
     | ComplianceRulePackInstallResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<ComplianceRulePackInstallResult> | ComplianceRulePackInstallResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ id: string }>(
     '*/compliance/packs/:id/install',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

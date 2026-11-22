@@ -11,21 +11,13 @@ import type { PageSizeParameter } from './pageSizeParameter';
 import type { Severity } from './severity';
 
 export type GetRunbooksParams = {
-  /**
-   * Filter to runbooks targeting this change type, e.g. vm.created. Mutually exclusive with alertSeverity and findingCheckType.
-   */
+  /** Filter to runbooks targeting this change type, e.g. vm.created. Mutually exclusive with alertSeverity and findingCheckType. */
   changeType?: string;
-  /**
-   * Filter to runbooks targeting this alert severity. Mutually exclusive with changeType and findingCheckType.
-   */
+  /** Filter to runbooks targeting this alert severity. Mutually exclusive with changeType and findingCheckType. */
   alertSeverity?: Severity;
-  /**
-   * Filter to runbooks targeting this quality finding check type, e.g. stale. Mutually exclusive with changeType and alertSeverity.
-   */
+  /** Filter to runbooks targeting this quality finding check type, e.g. stale. Mutually exclusive with changeType and alertSeverity. */
   findingCheckType?: string;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

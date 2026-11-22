@@ -13,8 +13,6 @@ export type GetTopologyPathParams = {
    * @maxLength 256
    */
   from: string;
-  /**
-   * @maxLength 256
-   */
+  /** @maxLength 256 */
   to?: string;
 };

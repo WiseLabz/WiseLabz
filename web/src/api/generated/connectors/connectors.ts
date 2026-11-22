@@ -143,6 +143,7 @@ export const getGetConnectorsQueryOptions = <
 export type GetConnectorsQueryResult = NonNullable<Awaited<ReturnType<typeof getConnectors>>>;
 export type GetConnectorsQueryError = ErrorType<unknown>;
 
+/** @summary List connectors with live status, grouped client-side by category */
 export function useGetConnectors<
   TData = Awaited<ReturnType<typeof getConnectors>>,
   TError = ErrorType<unknown>,
@@ -161,6 +162,7 @@ export function useGetConnectors<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List connectors with live status, grouped client-side by category */
 export function useGetConnectors<
   TData = Awaited<ReturnType<typeof getConnectors>>,
   TError = ErrorType<unknown>,
@@ -179,6 +181,7 @@ export function useGetConnectors<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List connectors with live status, grouped client-side by category */
 export function useGetConnectors<
   TData = Awaited<ReturnType<typeof getConnectors>>,
   TError = ErrorType<unknown>,
@@ -189,10 +192,7 @@ export function useGetConnectors<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List connectors with live status, grouped client-side by category
- */
-
+/** @summary List connectors with live status, grouped client-side by category */
 export function useGetConnectors<
   TData = Awaited<ReturnType<typeof getConnectors>>,
   TError = ErrorType<unknown>,
@@ -277,6 +277,7 @@ export type PostConnectorsMutationError = ErrorType<Error | ForbiddenResponse>;
 export type PostConnectorsMutationVariables = { data: BodyType<ConnectorCreate> };
 
 /**
+ * Declaring recipe actions requires an instance admin (403 otherwise). When `stepUpForDestructive` is enabled and the recipe declares actions, also requires an `X-Elevation-Token` for action `connector.recipeActions`.
  * @summary Create a connector (operator)
  */
 export const usePostConnectors = <
@@ -370,6 +371,7 @@ export type PreviewConnectorRecipeMutationError = ErrorType<
 export type PreviewConnectorRecipeMutationVariables = { data: BodyType<RecipePreviewInput> };
 
 /**
+ * Uses the guarded sync fetch pipeline, a 30-second deadline and a four-request concurrency limit. Empty secret fields use stored credentials when connectorId is supplied, but only when url has the saved connector's origin (scheme, host and port) and verifyTls is not turned off for a connector that verifies TLS; otherwise the request is rejected with 400 and the credentials must be re-entered. Results contain at most 20 sample entities per endpoint and no credentials. Writes only a connector.recipe_preview audit entry.
  * @summary Preview a custom REST recipe without saving (instance admin only)
  */
 export const usePreviewConnectorRecipe = <
@@ -437,6 +439,7 @@ export type GetConnectorsSchemaQueryResult = NonNullable<
 >;
 export type GetConnectorsSchemaQueryError = ErrorType<unknown>;
 
+/** @summary Category/type field metadata used to render schema-driven forms */
 export function useGetConnectorsSchema<
   TData = Awaited<ReturnType<typeof getConnectorsSchema>>,
   TError = ErrorType<unknown>,
@@ -457,6 +460,7 @@ export function useGetConnectorsSchema<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Category/type field metadata used to render schema-driven forms */
 export function useGetConnectorsSchema<
   TData = Awaited<ReturnType<typeof getConnectorsSchema>>,
   TError = ErrorType<unknown>,
@@ -477,6 +481,7 @@ export function useGetConnectorsSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Category/type field metadata used to render schema-driven forms */
 export function useGetConnectorsSchema<
   TData = Awaited<ReturnType<typeof getConnectorsSchema>>,
   TError = ErrorType<unknown>,
@@ -489,10 +494,7 @@ export function useGetConnectorsSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Category/type field metadata used to render schema-driven forms
- */
-
+/** @summary Category/type field metadata used to render schema-driven forms */
 export function useGetConnectorsSchema<
   TData = Awaited<ReturnType<typeof getConnectorsSchema>>,
   TError = ErrorType<unknown>,
@@ -567,6 +569,7 @@ export type GetConnectorsConnectorIdQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One connector */
 export function useGetConnectorsConnectorId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -588,6 +591,7 @@ export function useGetConnectorsConnectorId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One connector */
 export function useGetConnectorsConnectorId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -609,6 +613,7 @@ export function useGetConnectorsConnectorId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One connector */
 export function useGetConnectorsConnectorId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -622,10 +627,7 @@ export function useGetConnectorsConnectorId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One connector
- */
-
+/** @summary One connector */
 export function useGetConnectorsConnectorId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -721,6 +723,7 @@ export type PutConnectorsConnectorIdMutationVariables = {
 };
 
 /**
+ * Changing url, type, verifyTls, category or endpoint config requires an instance admin (403 otherwise); operators may resend the unchanged values. Adding, changing or removing recipe actions also requires an instance admin (403 otherwise), including a save that removes every action. When `stepUpForDestructive` is enabled and the save changes the recipe's actions to a non-empty set, it additionally requires an `X-Elevation-Token` for action `connector.recipeActions` bound to the connector id; removing all actions needs no token.
  * @summary Update a connector (operator)
  */
 export const usePutConnectorsConnectorId = <
@@ -811,6 +814,7 @@ export type DeleteConnectorsConnectorIdMutationError = ErrorType<
 export type DeleteConnectorsConnectorIdMutationVariables = { connectorId: string };
 
 /**
+ * Destructive: cascades to the connector's snapshots and generated doc sections (see GET /removal-impact for the blast radius). When `stepUpForDestructive` is enabled, requires a valid single-use `X-Elevation-Token` for action `connector.delete` from POST /auth/elevate: a missing token gets 400 `elevation_required`, and an invalid, expired, already used or mismatched token (including an empty one) gets 401 `unauthorized`. With step-up disabled no token is needed and the header is ignored.
  * @summary Remove a connector (operator, destructive)
  */
 export const useDeleteConnectorsConnectorId = <
@@ -901,6 +905,7 @@ export type PostConnectorsConnectorIdReleaseMutationError = ErrorType<
 export type PostConnectorsConnectorIdReleaseMutationVariables = { connectorId: string };
 
 /**
+ * A connector whose config.yaml entry was removed is disabled and marked `config-orphaned`. Releasing it sets `managedBy` back to `ui` so it can be edited normally; it stays disabled.
  * @summary Release an orphaned connector to UI management (operator)
  */
 export const usePostConnectorsConnectorIdRelease = <
@@ -986,6 +991,10 @@ export type GetConnectorsConnectorIdRemovalImpactQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdRemovalImpactQueryError = ErrorType<NotFoundResponse>;
 
+/**
+ * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
+ * @summary Blast radius for removing this connector (operator)
+ */
 export function useGetConnectorsConnectorIdRemovalImpact<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdRemovalImpact>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1011,6 +1020,10 @@ export function useGetConnectorsConnectorIdRemovalImpact<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
+ * @summary Blast radius for removing this connector (operator)
+ */
 export function useGetConnectorsConnectorIdRemovalImpact<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdRemovalImpact>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1036,6 +1049,10 @@ export function useGetConnectorsConnectorIdRemovalImpact<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
+ * @summary Blast radius for removing this connector (operator)
+ */
 export function useGetConnectorsConnectorIdRemovalImpact<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdRemovalImpact>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1054,9 +1071,9 @@ export function useGetConnectorsConnectorIdRemovalImpact<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Computes the concrete dependents a removal destroys, so the UI can state them exactly before the user commits (machine-honest confirm pattern).
  * @summary Blast radius for removing this connector (operator)
  */
-
 export function useGetConnectorsConnectorIdRemovalImpact<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdRemovalImpact>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1161,6 +1178,7 @@ export type PostConnectorsConnectorIdRestartMutationVariables = {
 };
 
 /**
+ * With `dryRun=true`, returns a restart preview from the latest stored service snapshot without touching the connector — no elevation token required. With `dryRun` absent or `false`, performs the real restart: requires a valid `X-Elevation-Token` for action `connector.restart` (from `POST /auth/elevate`), and 400s with `unsupported_operation` if the connector type has no restart capability. On success, records a `connector.restart` audit row; on failure, raises an `AlertRecord` instead of retrying (see ADR 0001).
  * @summary Preview or perform a service restart (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdRestart = <
@@ -1263,6 +1281,7 @@ export type PostConnectorsConnectorIdStartMutationVariables = {
 };
 
 /**
+ * Same dry-run/elevation-gated-mutate shape as /restart (see ADR 0002): dryRun=true previews from the latest stored snapshot; absent/false performs the real start, requiring a valid X-Elevation-Token for action connector.start. 400s with unsupported_operation if the connector type has no start capability. On success, records a connector.start audit row; on failure, raises an AlertRecord.
  * @summary Preview or perform a service start (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStart = <
@@ -1365,6 +1384,7 @@ export type PostConnectorsConnectorIdStopMutationVariables = {
 };
 
 /**
+ * Same dry-run/elevation-gated-mutate shape as /restart (see ADR 0002): dryRun=true previews from the latest stored snapshot; absent/false performs the real stop, requiring a valid X-Elevation-Token for action connector.stop. estimatedDowntimeSeconds is 0 in the preview since a stop's downtime is indefinite until an explicit start. 400s with unsupported_operation if the connector type has no stop capability. On success, records a connector.stop audit row; on failure, raises an AlertRecord.
  * @summary Preview or perform a service stop (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdStop = <
@@ -1469,6 +1489,7 @@ export type PostConnectorsConnectorIdActionsNameMutationVariables = {
 };
 
 /**
+ * With dryRun=true, returns the exact resolved same-origin request without contacting the service or requiring elevation. Execution requires connector.action elevation bound to <connector id>:<action name>. Lifecycle verbs use their existing endpoints. Only the fixed recipe request is sent; extra operator input has no effect. Success is 2xx, audited without a response body; failures raise a critical alert. The upstream status alone decides the result: any 2xx is success, any other status is a 502 here; the body is only sampled for the excerpt.
  * @summary Preview or perform a recipe-defined named action (operator)
  */
 export const usePostConnectorsConnectorIdActionsName = <
@@ -1554,6 +1575,10 @@ export type GetConnectorsConnectorIdConfigFieldsQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdConfigFieldsQueryError = ErrorType<NotFoundResponse>;
 
+/**
+ * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.
+ * @summary List a connector's whitelisted config-push fields
+ */
 export function useGetConnectorsConnectorIdConfigFields<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdConfigFields>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1579,6 +1604,10 @@ export function useGetConnectorsConnectorIdConfigFields<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.
+ * @summary List a connector's whitelisted config-push fields
+ */
 export function useGetConnectorsConnectorIdConfigFields<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdConfigFields>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1604,6 +1633,10 @@ export function useGetConnectorsConnectorIdConfigFields<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.
+ * @summary List a connector's whitelisted config-push fields
+ */
 export function useGetConnectorsConnectorIdConfigFields<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdConfigFields>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1622,9 +1655,9 @@ export function useGetConnectorsConnectorIdConfigFields<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Returns the connector's WritableFields() (ADR 0003), or an empty array if the connector type doesn't implement config-push.
  * @summary List a connector's whitelisted config-push fields
  */
-
 export function useGetConnectorsConnectorIdConfigFields<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdConfigFields>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1726,6 +1759,7 @@ export type PostConnectorsConnectorIdConfigPushMutationVariables = {
 };
 
 /**
+ * Field-level partial update per ADR 0003: requires a valid X-Elevation-Token for action connector.configPush. Snapshots the connector before the write, applies it, re-fetches, and diffs. On a verified match, records a connector.configPush audit row and returns the post-push snapshot. On mismatch, auto-reverts to previousValue and raises a critical AlertRecord (escalated further if the revert itself fails), returning 409. If the write returns success but the post-write fetch fails, records an audit row marked verification: unverified, raises a critical alert, and returns 409 config_push_unverified with message "Configuration write returned success, but verification failed; the resulting state is unknown." Verification is not retried and no fallback read or rollback is attempted. 400s with unsupported_operation if the connector doesn't implement config-push, or unsupported_field if fieldKey isn't in WritableFields().
  * @summary Push one whitelisted config field (operator, elevation-gated)
  */
 export const usePostConnectorsConnectorIdConfigPush = <
@@ -1803,6 +1837,7 @@ export type GetConnectorsConnectorIdDataQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdDataQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Latest fetched service snapshot (live data) */
 export function useGetConnectorsConnectorIdData<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdData>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1824,6 +1859,7 @@ export function useGetConnectorsConnectorIdData<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Latest fetched service snapshot (live data) */
 export function useGetConnectorsConnectorIdData<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdData>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1845,6 +1881,7 @@ export function useGetConnectorsConnectorIdData<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Latest fetched service snapshot (live data) */
 export function useGetConnectorsConnectorIdData<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdData>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1858,10 +1895,7 @@ export function useGetConnectorsConnectorIdData<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Latest fetched service snapshot (live data)
- */
-
+/** @summary Latest fetched service snapshot (live data) */
 export function useGetConnectorsConnectorIdData<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdData>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1940,6 +1974,10 @@ export type GetConnectorsConnectorIdUptimeQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdUptimeQueryError = ErrorType<NotFoundResponse>;
 
+/**
+ * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window. Time inside a maintenance window counts as neither uptime nor downtime, and an offline stretch fully inside one is not an outage. Checks are recorded by a scheduler (health.cron_expr, default every 60s) as well as by manual checks.
+ * @summary Availability % and MTTR over 24h/7d/30d windows
+ */
 export function useGetConnectorsConnectorIdUptime<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptime>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1961,6 +1999,10 @@ export function useGetConnectorsConnectorIdUptime<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window. Time inside a maintenance window counts as neither uptime nor downtime, and an offline stretch fully inside one is not an outage. Checks are recorded by a scheduler (health.cron_expr, default every 60s) as well as by manual checks.
+ * @summary Availability % and MTTR over 24h/7d/30d windows
+ */
 export function useGetConnectorsConnectorIdUptime<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptime>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1982,6 +2024,10 @@ export function useGetConnectorsConnectorIdUptime<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window. Time inside a maintenance window counts as neither uptime nor downtime, and an offline stretch fully inside one is not an outage. Checks are recorded by a scheduler (health.cron_expr, default every 60s) as well as by manual checks.
+ * @summary Availability % and MTTR over 24h/7d/30d windows
+ */
 export function useGetConnectorsConnectorIdUptime<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptime>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1996,9 +2042,9 @@ export function useGetConnectorsConnectorIdUptime<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Computed from the health_checks time series recorded by POST /connectors/{connectorId}/health. Availability is time-weighted between consecutive checks, and MTTR (mean time to recovery) is the mean time from an "offline" check to the next check that isn't, counting only outages that both started and recovered inside each window. Time inside a maintenance window counts as neither uptime nor downtime, and an offline stretch fully inside one is not an outage. Checks are recorded by a scheduler (health.cron_expr, default every 60s) as well as by manual checks.
  * @summary Availability % and MTTR over 24h/7d/30d windows
  */
-
 export function useGetConnectorsConnectorIdUptime<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptime>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2090,6 +2136,10 @@ export type GetConnectorsConnectorIdUptimeHistoryQueryError = ErrorType<
   BadRequestResponse | NotFoundResponse
 >;
 
+/**
+ * Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h, 30d = 6h), oldest first, each with its worst status and mean latency. Buckets with no checks are omitted.
+ * @summary Downsampled health history buckets for sparklines
+ */
 export function useGetConnectorsConnectorIdUptimeHistory<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2116,6 +2166,10 @@ export function useGetConnectorsConnectorIdUptimeHistory<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h, 30d = 6h), oldest first, each with its worst status and mean latency. Buckets with no checks are omitted.
+ * @summary Downsampled health history buckets for sparklines
+ */
 export function useGetConnectorsConnectorIdUptimeHistory<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2142,6 +2196,10 @@ export function useGetConnectorsConnectorIdUptimeHistory<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h, 30d = 6h), oldest first, each with its worst status and mean latency. Buckets with no checks are omitted.
+ * @summary Downsampled health history buckets for sparklines
+ */
 export function useGetConnectorsConnectorIdUptimeHistory<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2161,9 +2219,9 @@ export function useGetConnectorsConnectorIdUptimeHistory<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Health checks grouped into fixed-width buckets (24h = 15m, 7d = 1h, 30d = 6h), oldest first, each with its worst status and mean latency. Buckets with no checks are omitted.
  * @summary Downsampled health history buckets for sparklines
  */
-
 export function useGetConnectorsConnectorIdUptimeHistory<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdUptimeHistory>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2238,6 +2296,10 @@ export const getGetUptimeQueryOptions = <
 export type GetUptimeQueryResult = NonNullable<Awaited<ReturnType<typeof getUptime>>>;
 export type GetUptimeQueryError = ErrorType<BadRequestResponse>;
 
+/**
+ * Per-connector availability and MTTR over one window, restricted to connectors the caller holds at least a viewer grant on (and any API-key connector restriction).
+ * @summary Fleet availability for the connectors the caller can view
+ */
 export function useGetUptime<
   TData = Awaited<ReturnType<typeof getUptime>>,
   TError = ErrorType<BadRequestResponse>,
@@ -2257,6 +2319,10 @@ export function useGetUptime<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Per-connector availability and MTTR over one window, restricted to connectors the caller holds at least a viewer grant on (and any API-key connector restriction).
+ * @summary Fleet availability for the connectors the caller can view
+ */
 export function useGetUptime<
   TData = Awaited<ReturnType<typeof getUptime>>,
   TError = ErrorType<BadRequestResponse>,
@@ -2276,6 +2342,10 @@ export function useGetUptime<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Per-connector availability and MTTR over one window, restricted to connectors the caller holds at least a viewer grant on (and any API-key connector restriction).
+ * @summary Fleet availability for the connectors the caller can view
+ */
 export function useGetUptime<
   TData = Awaited<ReturnType<typeof getUptime>>,
   TError = ErrorType<BadRequestResponse>,
@@ -2288,9 +2358,9 @@ export function useGetUptime<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Per-connector availability and MTTR over one window, restricted to connectors the caller holds at least a viewer grant on (and any API-key connector restriction).
  * @summary Fleet availability for the connectors the caller can view
  */
-
 export function useGetUptime<
   TData = Awaited<ReturnType<typeof getUptime>>,
   TError = ErrorType<BadRequestResponse>,
@@ -2371,9 +2441,7 @@ export type PostConnectorsConnectorIdTestMutationResult = NonNullable<
 export type PostConnectorsConnectorIdTestMutationError = ErrorType<unknown>;
 export type PostConnectorsConnectorIdTestMutationVariables = { connectorId: string };
 
-/**
- * @summary Test connection without saving
- */
+/** @summary Test connection without saving */
 export const usePostConnectorsConnectorIdTest = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -2455,6 +2523,7 @@ export type PostConnectorsConnectorIdHealthMutationError = ErrorType<NotFoundRes
 export type PostConnectorsConnectorIdHealthMutationVariables = { connectorId: string };
 
 /**
+ * Runs the connector's Validate step only and saves the resulting online/degraded/offline status, independently of running a full sync. Unlike /test, this call updates the connector's persisted status.
  * @summary Cheap connectivity check (no fetch, no snapshot, no docs); persists status
  */
 export const usePostConnectorsConnectorIdHealth = <
@@ -2550,9 +2619,7 @@ export type PostConnectorsConnectorIdSyncMutationVariables = {
   data?: BodyType<PostConnectorsConnectorIdSyncBody>;
 };
 
-/**
- * @summary Trigger a sync for one connector (progress streams over /ws)
- */
+/** @summary Trigger a sync for one connector (progress streams over /ws) */
 export const usePostConnectorsConnectorIdSync = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -2631,6 +2698,7 @@ export type GetConnectorsConnectorIdSyncsQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdSyncsQueryError = ErrorType<unknown>;
 
+/** @summary Recent sync run history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSyncs<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
   TError = ErrorType<unknown>,
@@ -2653,6 +2721,7 @@ export function useGetConnectorsConnectorIdSyncs<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Recent sync run history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSyncs<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
   TError = ErrorType<unknown>,
@@ -2675,6 +2744,7 @@ export function useGetConnectorsConnectorIdSyncs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Recent sync run history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSyncs<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
   TError = ErrorType<unknown>,
@@ -2689,10 +2759,7 @@ export function useGetConnectorsConnectorIdSyncs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Recent sync run history for one connector (newest first)
- */
-
+/** @summary Recent sync run history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSyncs<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSyncs>>,
   TError = ErrorType<unknown>,
@@ -2777,6 +2844,7 @@ export type GetConnectorsConnectorIdSnapshotsQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdSnapshotsQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Snapshot history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSnapshots<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshots>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2799,6 +2867,7 @@ export function useGetConnectorsConnectorIdSnapshots<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Snapshot history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSnapshots<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshots>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2821,6 +2890,7 @@ export function useGetConnectorsConnectorIdSnapshots<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Snapshot history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSnapshots<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshots>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2835,10 +2905,7 @@ export function useGetConnectorsConnectorIdSnapshots<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Snapshot history for one connector (newest first)
- */
-
+/** @summary Snapshot history for one connector (newest first) */
 export function useGetConnectorsConnectorIdSnapshots<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshots>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2935,6 +3002,10 @@ export type GetConnectorsConnectorIdSnapshotsDiffQueryError = ErrorType<
   BadRequestResponse | NotFoundResponse
 >;
 
+/**
+ * Without format, returns JSON for the browser. With format, downloads an attachment and records an audit event.
+ * @summary Compare two snapshots of one connector
+ */
 export function useGetConnectorsConnectorIdSnapshotsDiff<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsDiff>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2961,6 +3032,10 @@ export function useGetConnectorsConnectorIdSnapshotsDiff<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Without format, returns JSON for the browser. With format, downloads an attachment and records an audit event.
+ * @summary Compare two snapshots of one connector
+ */
 export function useGetConnectorsConnectorIdSnapshotsDiff<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsDiff>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -2987,6 +3062,10 @@ export function useGetConnectorsConnectorIdSnapshotsDiff<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Without format, returns JSON for the browser. With format, downloads an attachment and records an audit event.
+ * @summary Compare two snapshots of one connector
+ */
 export function useGetConnectorsConnectorIdSnapshotsDiff<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsDiff>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -3006,9 +3085,9 @@ export function useGetConnectorsConnectorIdSnapshotsDiff<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Without format, returns JSON for the browser. With format, downloads an attachment and records an audit event.
  * @summary Compare two snapshots of one connector
  */
-
 export function useGetConnectorsConnectorIdSnapshotsDiff<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsDiff>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -3111,6 +3190,7 @@ export type GetConnectorsConnectorIdSnapshotsSnapshotIdQueryResult = NonNullable
 >;
 export type GetConnectorsConnectorIdSnapshotsSnapshotIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Full snapshot belonging to one connector */
 export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsSnapshotId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3137,6 +3217,7 @@ export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Full snapshot belonging to one connector */
 export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsSnapshotId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3163,6 +3244,7 @@ export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Full snapshot belonging to one connector */
 export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsSnapshotId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3181,10 +3263,7 @@ export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Full snapshot belonging to one connector
- */
-
+/** @summary Full snapshot belonging to one connector */
 export function useGetConnectorsConnectorIdSnapshotsSnapshotId<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdSnapshotsSnapshotId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3283,6 +3362,7 @@ export type PostConnectorsBulkSyncMutationError = ErrorType<BadRequestResponse>;
 export type PostConnectorsBulkSyncMutationVariables = { data: BodyType<ConnectorBulkSyncRequest> };
 
 /**
+ * Fans out an async sync per connector (same as POST /connectors/{connectorId}/sync); progress for each streams over /ws. The caller must supply an explicit list of connector IDs. One bad ID never aborts the batch — the response reports a per-item outcome, and one audit record is written per successfully-started item.
  * @summary Trigger a sync for an explicit list of connectors in one request
  */
 export const usePostConnectorsBulkSync = <
@@ -3376,6 +3456,7 @@ export type PostConnectorsBulkReauthMutationVariables = {
 };
 
 /**
+ * For each connector implementing credential refresh, refreshes and persists its credentials. Not elevation-gated (matches how single-connector sync/re-auth aren't gated today either). One bad ID never aborts the batch; one audit record is written per successfully-refreshed item.
  * @summary Refresh credentials for an explicit list of connectors in one request
  */
 export const usePostConnectorsBulkReauth = <
@@ -3469,6 +3550,7 @@ export type PostConnectorsBulkRestartMutationVariables = {
 };
 
 /**
+ * When `stepUpForDestructive` is enabled, gated by X-Elevation-Token, action `connector.bulkRestart` — one elevation covers the whole batch, not one per item. A missing token gets 400 `elevation_required`; an invalid, expired, already used or mismatched token gets 401 `unauthorized`. One bad ID never aborts the batch; one audit record is written per successfully-restarted item.
  * @summary Restart an explicit list of connectors in one request
  */
 export const usePostConnectorsBulkRestart = <TError = ErrorType<Error>, TContext = unknown>(
@@ -3561,9 +3643,7 @@ export type PutConnectorsConnectorIdEnabledMutationVariables = {
   data: BodyType<PutConnectorsConnectorIdEnabledBody>;
 };
 
-/**
- * @summary Enable/disable a connector
- */
+/** @summary Enable/disable a connector */
 export const usePutConnectorsConnectorIdEnabled = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -3644,6 +3724,7 @@ export type GetConnectorsConnectorIdMaintenanceWindowQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdMaintenanceWindowQueryError = ErrorType<unknown>;
 
+/** @summary Get a connector's active maintenance window, if any */
 export function useGetConnectorsConnectorIdMaintenanceWindow<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdMaintenanceWindow>>,
   TError = ErrorType<unknown>,
@@ -3669,6 +3750,7 @@ export function useGetConnectorsConnectorIdMaintenanceWindow<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a connector's active maintenance window, if any */
 export function useGetConnectorsConnectorIdMaintenanceWindow<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdMaintenanceWindow>>,
   TError = ErrorType<unknown>,
@@ -3694,6 +3776,7 @@ export function useGetConnectorsConnectorIdMaintenanceWindow<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a connector's active maintenance window, if any */
 export function useGetConnectorsConnectorIdMaintenanceWindow<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdMaintenanceWindow>>,
   TError = ErrorType<unknown>,
@@ -3711,10 +3794,7 @@ export function useGetConnectorsConnectorIdMaintenanceWindow<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Get a connector's active maintenance window, if any
- */
-
+/** @summary Get a connector's active maintenance window, if any */
 export function useGetConnectorsConnectorIdMaintenanceWindow<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdMaintenanceWindow>>,
   TError = ErrorType<unknown>,
@@ -3819,6 +3899,7 @@ export type PostConnectorsConnectorIdMaintenanceWindowMutationVariables = {
 };
 
 /**
+ * While active, the scheduler skips this connector and drift alerting/change-record creation from any sync (scheduled or manual) is suppressed, though snapshots keep being saved. Operator-only, no step-up elevation required — reversible and time-boxed.
  * @summary Open a time-boxed maintenance window on a connector
  */
 export const usePostConnectorsConnectorIdMaintenanceWindow = <
@@ -3906,9 +3987,7 @@ export type DeleteConnectorsConnectorIdMaintenanceWindowMutationResult = NonNull
 export type DeleteConnectorsConnectorIdMaintenanceWindowMutationError = ErrorType<unknown>;
 export type DeleteConnectorsConnectorIdMaintenanceWindowMutationVariables = { connectorId: string };
 
-/**
- * @summary Close a connector's active maintenance window early (no-op if none)
- */
+/** @summary Close a connector's active maintenance window early (no-op if none) */
 export const useDeleteConnectorsConnectorIdMaintenanceWindow = <
   TError = ErrorType<unknown>,
   TContext = unknown,
@@ -3994,6 +4073,7 @@ export type GetConnectorsConnectorIdGoldenSnapshotQueryResult = NonNullable<
 >;
 export type GetConnectorsConnectorIdGoldenSnapshotQueryError = ErrorType<unknown>;
 
+/** @summary Get a connector's pinned golden snapshot, if any */
 export function useGetConnectorsConnectorIdGoldenSnapshot<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdGoldenSnapshot>>,
   TError = ErrorType<unknown>,
@@ -4019,6 +4099,7 @@ export function useGetConnectorsConnectorIdGoldenSnapshot<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a connector's pinned golden snapshot, if any */
 export function useGetConnectorsConnectorIdGoldenSnapshot<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdGoldenSnapshot>>,
   TError = ErrorType<unknown>,
@@ -4044,6 +4125,7 @@ export function useGetConnectorsConnectorIdGoldenSnapshot<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a connector's pinned golden snapshot, if any */
 export function useGetConnectorsConnectorIdGoldenSnapshot<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdGoldenSnapshot>>,
   TError = ErrorType<unknown>,
@@ -4061,10 +4143,7 @@ export function useGetConnectorsConnectorIdGoldenSnapshot<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Get a connector's pinned golden snapshot, if any
- */
-
+/** @summary Get a connector's pinned golden snapshot, if any */
 export function useGetConnectorsConnectorIdGoldenSnapshot<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdGoldenSnapshot>>,
   TError = ErrorType<unknown>,
@@ -4166,6 +4245,7 @@ export type PostConnectorsConnectorIdGoldenSnapshotMutationVariables = {
 };
 
 /**
+ * Later syncs are compared against this snapshot (not just the immediately previous one) and a config_drift quality finding is raised when attributes deviate. Operator-only.
  * @summary Pin a snapshot as the connector's golden configuration baseline
  */
 export const usePostConnectorsConnectorIdGoldenSnapshot = <
@@ -4253,9 +4333,7 @@ export type DeleteConnectorsConnectorIdGoldenSnapshotMutationResult = NonNullabl
 export type DeleteConnectorsConnectorIdGoldenSnapshotMutationError = ErrorType<unknown>;
 export type DeleteConnectorsConnectorIdGoldenSnapshotMutationVariables = { connectorId: string };
 
-/**
- * @summary Unpin a connector's golden snapshot (no-op if none)
- */
+/** @summary Unpin a connector's golden snapshot (no-op if none) */
 export const useDeleteConnectorsConnectorIdGoldenSnapshot = <
   TError = ErrorType<unknown>,
   TContext = unknown,
@@ -4328,6 +4406,10 @@ export type GetConnectorsMaintenanceWindowsQueryResult = NonNullable<
 >;
 export type GetConnectorsMaintenanceWindowsQueryError = ErrorType<unknown>;
 
+/**
+ * Used by the services list badge to avoid an N+1 fetch per row.
+ * @summary List every currently active maintenance window, across all connectors
+ */
 export function useGetConnectorsMaintenanceWindows<
   TData = Awaited<ReturnType<typeof getConnectorsMaintenanceWindows>>,
   TError = ErrorType<unknown>,
@@ -4348,6 +4430,10 @@ export function useGetConnectorsMaintenanceWindows<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Used by the services list badge to avoid an N+1 fetch per row.
+ * @summary List every currently active maintenance window, across all connectors
+ */
 export function useGetConnectorsMaintenanceWindows<
   TData = Awaited<ReturnType<typeof getConnectorsMaintenanceWindows>>,
   TError = ErrorType<unknown>,
@@ -4368,6 +4454,10 @@ export function useGetConnectorsMaintenanceWindows<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Used by the services list badge to avoid an N+1 fetch per row.
+ * @summary List every currently active maintenance window, across all connectors
+ */
 export function useGetConnectorsMaintenanceWindows<
   TData = Awaited<ReturnType<typeof getConnectorsMaintenanceWindows>>,
   TError = ErrorType<unknown>,
@@ -4381,9 +4471,9 @@ export function useGetConnectorsMaintenanceWindows<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Used by the services list badge to avoid an N+1 fetch per row.
  * @summary List every currently active maintenance window, across all connectors
  */
-
 export function useGetConnectorsMaintenanceWindows<
   TData = Awaited<ReturnType<typeof getConnectorsMaintenanceWindows>>,
   TError = ErrorType<unknown>,
@@ -4442,9 +4532,7 @@ export type PostSyncMutationResult = NonNullable<Awaited<ReturnType<typeof postS
 
 export type PostSyncMutationError = ErrorType<unknown>;
 
-/**
- * @summary Trigger a global sync of all connectors
- */
+/** @summary Trigger a global sync of all connectors */
 export const usePostSync = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<Awaited<ReturnType<typeof postSync>>, TError, void, TContext>;
@@ -4517,6 +4605,10 @@ export type GetConnectorsConnectorIdPermissionsQueryError = ErrorType<
   ForbiddenResponse | NotFoundResponse
 >;
 
+/**
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API. `source: "config"` rows are read-only too: they come from the connector's `grants` in config.yaml and are reconciled at startup.
+ * @summary List per-connector access grants (instance-admin only)
+ */
 export function useGetConnectorsConnectorIdPermissions<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdPermissions>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -4542,6 +4634,10 @@ export function useGetConnectorsConnectorIdPermissions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API. `source: "config"` rows are read-only too: they come from the connector's `grants` in config.yaml and are reconciled at startup.
+ * @summary List per-connector access grants (instance-admin only)
+ */
 export function useGetConnectorsConnectorIdPermissions<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdPermissions>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -4567,6 +4663,10 @@ export function useGetConnectorsConnectorIdPermissions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API. `source: "config"` rows are read-only too: they come from the connector's `grants` in config.yaml and are reconciled at startup.
+ * @summary List per-connector access grants (instance-admin only)
+ */
 export function useGetConnectorsConnectorIdPermissions<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdPermissions>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -4585,9 +4685,9 @@ export function useGetConnectorsConnectorIdPermissions<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * One row per (user, source) pair — a user with both a manual grant and an OIDC group->connector-role sync can appear twice, once per `source` (#279 part 3). `source: "oidc"` rows are read-only: they're revoked by the user's IdP group membership at their next login, not by this API. `source: "config"` rows are read-only too: they come from the connector's `grants` in config.yaml and are reconciled at startup.
  * @summary List per-connector access grants (instance-admin only)
  */
-
 export function useGetConnectorsConnectorIdPermissions<
   TData = Awaited<ReturnType<typeof getConnectorsConnectorIdPermissions>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -4691,6 +4791,7 @@ export type PutConnectorsConnectorIdPermissionsUserIdMutationVariables = {
 };
 
 /**
+ * Always acts on the `source: "manual"` grant; never touches an `oidc` row synced for the same user/connector pair (#279 part 3).
  * @summary Grant or change a user's manual role on a connector (instance-admin only)
  */
 export const usePutConnectorsConnectorIdPermissionsUserId = <
@@ -4786,6 +4887,7 @@ export type DeleteConnectorsConnectorIdPermissionsUserIdMutationVariables = {
 };
 
 /**
+ * Always acts on the `source: "manual"` grant; an `oidc` row synced for the same pair, if any, is untouched and still governs access until the user's next login (#279 part 3).
  * @summary Revoke a user's manual grant on a connector (instance-admin only)
  */
 export const useDeleteConnectorsConnectorIdPermissionsUserId = <

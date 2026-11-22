@@ -11,13 +11,9 @@ import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetNotificationsDeliveriesParams = {
-  /**
-   * Filter by delivery status.
-   */
+  /** Filter by delivery status. */
   status?: GetNotificationsDeliveriesStatus;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

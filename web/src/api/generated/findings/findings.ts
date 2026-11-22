@@ -95,6 +95,7 @@ export const getGetFindingsQueryOptions = <
 export type GetFindingsQueryResult = NonNullable<Awaited<ReturnType<typeof getFindings>>>;
 export type GetFindingsQueryError = ErrorType<unknown>;
 
+/** @summary Documentation quality findings */
 export function useGetFindings<
   TData = Awaited<ReturnType<typeof getFindings>>,
   TError = ErrorType<unknown>,
@@ -114,6 +115,7 @@ export function useGetFindings<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Documentation quality findings */
 export function useGetFindings<
   TData = Awaited<ReturnType<typeof getFindings>>,
   TError = ErrorType<unknown>,
@@ -133,6 +135,7 @@ export function useGetFindings<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Documentation quality findings */
 export function useGetFindings<
   TData = Awaited<ReturnType<typeof getFindings>>,
   TError = ErrorType<unknown>,
@@ -144,10 +147,7 @@ export function useGetFindings<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Documentation quality findings
- */
-
+/** @summary Documentation quality findings */
 export function useGetFindings<
   TData = Awaited<ReturnType<typeof getFindings>>,
   TError = ErrorType<unknown>,
@@ -220,6 +220,7 @@ export type GetFindingsFindingIdQueryResult = NonNullable<
 >;
 export type GetFindingsFindingIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One documentation quality finding */
 export function useGetFindingsFindingId<
   TData = Awaited<ReturnType<typeof getFindingsFindingId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -241,6 +242,7 @@ export function useGetFindingsFindingId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One documentation quality finding */
 export function useGetFindingsFindingId<
   TData = Awaited<ReturnType<typeof getFindingsFindingId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -262,6 +264,7 @@ export function useGetFindingsFindingId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One documentation quality finding */
 export function useGetFindingsFindingId<
   TData = Awaited<ReturnType<typeof getFindingsFindingId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -275,10 +278,7 @@ export function useGetFindingsFindingId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One documentation quality finding
- */
-
+/** @summary One documentation quality finding */
 export function useGetFindingsFindingId<
   TData = Awaited<ReturnType<typeof getFindingsFindingId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -363,9 +363,7 @@ export type PostFindingsFindingIdResolveMutationError = ErrorType<
 >;
 export type PostFindingsFindingIdResolveMutationVariables = { findingId: string };
 
-/**
- * @summary Resolve a documentation quality finding (operator)
- */
+/** @summary Resolve a documentation quality finding (operator) */
 export const usePostFindingsFindingIdResolve = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,

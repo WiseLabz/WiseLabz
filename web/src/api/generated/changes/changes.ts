@@ -98,6 +98,7 @@ export const getGetChangesQueryOptions = <
 export type GetChangesQueryResult = NonNullable<Awaited<ReturnType<typeof getChanges>>>;
 export type GetChangesQueryError = ErrorType<unknown>;
 
+/** @summary Global changelog feed */
 export function useGetChanges<
   TData = Awaited<ReturnType<typeof getChanges>>,
   TError = ErrorType<unknown>,
@@ -117,6 +118,7 @@ export function useGetChanges<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Global changelog feed */
 export function useGetChanges<
   TData = Awaited<ReturnType<typeof getChanges>>,
   TError = ErrorType<unknown>,
@@ -136,6 +138,7 @@ export function useGetChanges<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Global changelog feed */
 export function useGetChanges<
   TData = Awaited<ReturnType<typeof getChanges>>,
   TError = ErrorType<unknown>,
@@ -147,10 +150,7 @@ export function useGetChanges<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Global changelog feed
- */
-
+/** @summary Global changelog feed */
 export function useGetChanges<
   TData = Awaited<ReturnType<typeof getChanges>>,
   TError = ErrorType<unknown>,
@@ -221,6 +221,7 @@ export type GetChangesChangeIdQueryResult = NonNullable<
 >;
 export type GetChangesChangeIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One change with before/after diff */
 export function useGetChangesChangeId<
   TData = Awaited<ReturnType<typeof getChangesChangeId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -240,6 +241,7 @@ export function useGetChangesChangeId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One change with before/after diff */
 export function useGetChangesChangeId<
   TData = Awaited<ReturnType<typeof getChangesChangeId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -261,6 +263,7 @@ export function useGetChangesChangeId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One change with before/after diff */
 export function useGetChangesChangeId<
   TData = Awaited<ReturnType<typeof getChangesChangeId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -272,10 +275,7 @@ export function useGetChangesChangeId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One change with before/after diff
- */
-
+/** @summary One change with before/after diff */
 export function useGetChangesChangeId<
   TData = Awaited<ReturnType<typeof getChangesChangeId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -355,9 +355,7 @@ export type PostChangesChangeIdAckMutationResult = NonNullable<
 export type PostChangesChangeIdAckMutationError = ErrorType<unknown>;
 export type PostChangesChangeIdAckMutationVariables = { changeId: string };
 
-/**
- * @summary Acknowledge a change
- */
+/** @summary Acknowledge a change */
 export const usePostChangesChangeIdAck = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -437,9 +435,7 @@ export type PostChangesChangeIdDismissMutationResult = NonNullable<
 export type PostChangesChangeIdDismissMutationError = ErrorType<unknown>;
 export type PostChangesChangeIdDismissMutationVariables = { changeId: string };
 
-/**
- * @summary Dismiss a change
- */
+/** @summary Dismiss a change */
 export const usePostChangesChangeIdDismiss = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -533,6 +529,7 @@ export type PostChangesChangeIdResolveDocMutationVariables = {
 };
 
 /**
+ * `accept` applies the generated text (a conflict's block body, or the whole generated layout for an adopt). `keep` keeps the human version; for a conflict this detaches the block so sync never touches it again. Requires an operator grant on the change's connector. The change is acknowledged on success.
  * @summary Resolve a doc_conflict or doc_adopt change
  */
 export const usePostChangesChangeIdResolveDoc = <
@@ -624,6 +621,7 @@ export type PostChangesBulkResolveMutationError = ErrorType<BadRequestResponse>;
 export type PostChangesBulkResolveMutationVariables = { data: BodyType<BulkResolveRequest> };
 
 /**
+ * Bulk review action for low-risk changes (issue #27). The caller must supply an explicit list of change IDs — there is no "all matching the current filter" option, by design. "Low-risk" is enforced server-side as severity != critical; the client's selection is never trusted. Each ID is independently verified (exists, not critical) and resolved on its own — one bad ID never aborts the batch. The response reports a per-item outcome, and one audit record is written per successfully-resolved item.
  * @summary Acknowledge or dismiss an explicit list of changes in one request
  */
 export const usePostChangesBulkResolve = <
@@ -708,9 +706,7 @@ export type PostChangesChangeIdAiUpdateMutationResult = NonNullable<
 export type PostChangesChangeIdAiUpdateMutationError = ErrorType<Error>;
 export type PostChangesChangeIdAiUpdateMutationVariables = { changeId: string };
 
-/**
- * @summary Trigger an AI doc update for this change (AI module must be enabled)
- */
+/** @summary Trigger an AI doc update for this change (AI module must be enabled) */
 export const usePostChangesChangeIdAiUpdate = <TError = ErrorType<Error>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -792,6 +788,7 @@ export type PostChangesChangeIdExplainMutationError = ErrorType<NotFoundResponse
 export type PostChangesChangeIdExplainMutationVariables = { changeId: string };
 
 /**
+ * On-demand narration of why this change matters, separate from the AI doc-update suggestion. The first call generates and persists the narration on the change record; subsequent calls return the cached text without re-invoking the AI provider.
  * @summary Generate (or return the cached) plain-English narration for a change
  */
 export const usePostChangesChangeIdExplain = <

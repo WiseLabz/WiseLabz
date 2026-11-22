@@ -99,6 +99,7 @@ export type GetReportsDefinitionsQueryResult = NonNullable<
 >;
 export type GetReportsDefinitionsQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary List report definitions (operator) */
 export function useGetReportsDefinitions<
   TData = Awaited<ReturnType<typeof getReportsDefinitions>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -119,6 +120,7 @@ export function useGetReportsDefinitions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List report definitions (operator) */
 export function useGetReportsDefinitions<
   TData = Awaited<ReturnType<typeof getReportsDefinitions>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -139,6 +141,7 @@ export function useGetReportsDefinitions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List report definitions (operator) */
 export function useGetReportsDefinitions<
   TData = Awaited<ReturnType<typeof getReportsDefinitions>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -151,10 +154,7 @@ export function useGetReportsDefinitions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List report definitions (operator)
- */
-
+/** @summary List report definitions (operator) */
 export function useGetReportsDefinitions<
   TData = Awaited<ReturnType<typeof getReportsDefinitions>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -241,9 +241,7 @@ export type PostReportsDefinitionsMutationBody = BodyType<ReportDefinitionInput>
 export type PostReportsDefinitionsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
 export type PostReportsDefinitionsMutationVariables = { data: BodyType<ReportDefinitionInput> };
 
-/**
- * @summary Create a report definition (operator). Registers a cron job named `report:<slug>`. `slug` must be unique (code `slug_taken` otherwise); `cronExpr` is validated the same way as other scheduled jobs; `timezone` must be a valid IANA zone name (applied as a `CRON_TZ=` prefix on the cron expression). Audited as `report.definition.create`.
- */
+/** @summary Create a report definition (operator). Registers a cron job named `report:<slug>`. `slug` must be unique (code `slug_taken` otherwise); `cronExpr` is validated the same way as other scheduled jobs; `timezone` must be a valid IANA zone name (applied as a `CRON_TZ=` prefix on the cron expression). Audited as `report.definition.create`. */
 export const usePostReportsDefinitions = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
   TContext = unknown,
@@ -338,9 +336,7 @@ export type PutReportsDefinitionsReportDefinitionIdMutationVariables = {
   data: BodyType<ReportDefinitionInput>;
 };
 
-/**
- * @summary Update a report definition (operator). Re-registers the cron job if `cronExpr`/`timezone`/`enabled` changed. `slug` is immutable; a different value is rejected with `400` (code `slug_immutable`). Audited as `report.definition.update`.
- */
+/** @summary Update a report definition (operator). Re-registers the cron job if `cronExpr`/`timezone`/`enabled` changed. `slug` is immutable; a different value is rejected with `400` (code `slug_immutable`). Audited as `report.definition.update`. */
 export const usePutReportsDefinitionsReportDefinitionId = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -430,9 +426,7 @@ export type DeleteReportsDefinitionsReportDefinitionIdMutationVariables = {
   reportDefinitionId: string;
 };
 
-/**
- * @summary Delete a report definition (operator). Unregisters its cron job and deletes its `job_health` row (`report:<slug>`); previously generated reports are kept with `definitionId` set to null. Audited as `report.definition.delete`.
- */
+/** @summary Delete a report definition (operator). Unregisters its cron job and deletes its `job_health` row (`report:<slug>`); previously generated reports are kept with `definitionId` set to null. Audited as `report.definition.delete`. */
 export const useDeleteReportsDefinitionsReportDefinitionId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -522,9 +516,7 @@ export type PostReportsDefinitionsReportDefinitionIdRunMutationVariables = {
   reportDefinitionId: string;
 };
 
-/**
- * @summary Generate a report immediately (operator). Uses the same window as the next scheduled run (previous scheduled report's `periodEnd` → now, or the last 7 days on a definition's first run; capped at 31 days) but does NOT advance the definition's schedule watermark, so the next scheduled tick still covers the period this manual run also covered. Delivers to the definition's configured channels the same as a scheduled run. Audited as `report.definition.run`.
- */
+/** @summary Generate a report immediately (operator). Uses the same window as the next scheduled run (previous scheduled report's `periodEnd` → now, or the last 7 days on a definition's first run; capped at 31 days) but does NOT advance the definition's schedule watermark, so the next scheduled tick still covers the period this manual run also covered. Delivers to the definition's configured channels the same as a scheduled run. Audited as `report.definition.run`. */
 export const usePostReportsDefinitionsReportDefinitionIdRun = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -592,6 +584,7 @@ export const getGetReportsQueryOptions = <
 export type GetReportsQueryResult = NonNullable<Awaited<ReturnType<typeof getReports>>>;
 export type GetReportsQueryError = ErrorType<unknown>;
 
+/** @summary List generated reports, newest first */
 export function useGetReports<
   TData = Awaited<ReturnType<typeof getReports>>,
   TError = ErrorType<unknown>,
@@ -611,6 +604,7 @@ export function useGetReports<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List generated reports, newest first */
 export function useGetReports<
   TData = Awaited<ReturnType<typeof getReports>>,
   TError = ErrorType<unknown>,
@@ -630,6 +624,7 @@ export function useGetReports<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List generated reports, newest first */
 export function useGetReports<
   TData = Awaited<ReturnType<typeof getReports>>,
   TError = ErrorType<unknown>,
@@ -641,10 +636,7 @@ export function useGetReports<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List generated reports, newest first
- */
-
+/** @summary List generated reports, newest first */
 export function useGetReports<
   TData = Awaited<ReturnType<typeof getReports>>,
   TError = ErrorType<unknown>,
@@ -712,6 +704,7 @@ export type GetReportsReportIdQueryResult = NonNullable<
 >;
 export type GetReportsReportIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One generated report, including its typed data and rendered Markdown */
 export function useGetReportsReportId<
   TData = Awaited<ReturnType<typeof getReportsReportId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -731,6 +724,7 @@ export function useGetReportsReportId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One generated report, including its typed data and rendered Markdown */
 export function useGetReportsReportId<
   TData = Awaited<ReturnType<typeof getReportsReportId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -752,6 +746,7 @@ export function useGetReportsReportId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One generated report, including its typed data and rendered Markdown */
 export function useGetReportsReportId<
   TData = Awaited<ReturnType<typeof getReportsReportId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -763,10 +758,7 @@ export function useGetReportsReportId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One generated report, including its typed data and rendered Markdown
- */
-
+/** @summary One generated report, including its typed data and rendered Markdown */
 export function useGetReportsReportId<
   TData = Awaited<ReturnType<typeof getReportsReportId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -846,6 +838,7 @@ export type GetReportsReportIdDownloadQueryResult = NonNullable<
 >;
 export type GetReportsReportIdDownloadQueryError = ErrorType<BadRequestResponse | NotFoundResponse>;
 
+/** @summary Download a report as Markdown or self-contained HTML */
 export function useGetReportsReportIdDownload<
   TData = Awaited<ReturnType<typeof getReportsReportIdDownload>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -868,6 +861,7 @@ export function useGetReportsReportIdDownload<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Download a report as Markdown or self-contained HTML */
 export function useGetReportsReportIdDownload<
   TData = Awaited<ReturnType<typeof getReportsReportIdDownload>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -890,6 +884,7 @@ export function useGetReportsReportIdDownload<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Download a report as Markdown or self-contained HTML */
 export function useGetReportsReportIdDownload<
   TData = Awaited<ReturnType<typeof getReportsReportIdDownload>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
@@ -904,10 +899,7 @@ export function useGetReportsReportIdDownload<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Download a report as Markdown or self-contained HTML
- */
-
+/** @summary Download a report as Markdown or self-contained HTML */
 export function useGetReportsReportIdDownload<
   TData = Awaited<ReturnType<typeof getReportsReportIdDownload>>,
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,

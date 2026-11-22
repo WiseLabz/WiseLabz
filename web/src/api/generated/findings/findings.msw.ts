@@ -7,7 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, RequestHandlerOptions } from 'msw';
 
 import type { QualityFinding, QualityFindingPage } from '../../model';
 
@@ -27,13 +27,13 @@ export const getGetFindingsMockHandler = (
   overrideResponse?:
     | QualityFindingPage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<QualityFindingPage> | QualityFindingPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/findings',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -51,13 +51,13 @@ export const getGetFindingsFindingIdMockHandler = (
   overrideResponse?:
     | QualityFinding
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ findingId: string }>>[0]
       ) => Promise<QualityFinding> | QualityFinding),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ findingId: string }>(
     '*/findings/:findingId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ findingId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -75,13 +75,13 @@ export const getPostFindingsFindingIdResolveMockHandler = (
   overrideResponse?:
     | QualityFinding
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ findingId: string }>>[0]
       ) => Promise<QualityFinding> | QualityFinding),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ findingId: string }>(
     '*/findings/:findingId/resolve',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ findingId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

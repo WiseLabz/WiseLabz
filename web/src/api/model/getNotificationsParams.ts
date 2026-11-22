@@ -10,13 +10,9 @@ import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetNotificationsParams = {
-  /**
-   * When true, return only unread notifications (total reflects the unread count).
-   */
+  /** When true, return only unread notifications (total reflects the unread count). */
   unread?: boolean;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

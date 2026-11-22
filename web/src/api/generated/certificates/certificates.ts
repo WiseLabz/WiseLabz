@@ -87,6 +87,10 @@ export const getGetCertificatesQueryOptions = <
 export type GetCertificatesQueryResult = NonNullable<Awaited<ReturnType<typeof getCertificates>>>;
 export type GetCertificatesQueryError = ErrorType<BadRequestResponse>;
 
+/**
+ * Uses latest snapshots independently of installed compliance rules, applying viewer grants and API-key connector restrictions. Limits above 100 are capped at 100.
+ * @summary Certificates ordered by expiry across viewable connectors
+ */
 export function useGetCertificates<
   TData = Awaited<ReturnType<typeof getCertificates>>,
   TError = ErrorType<BadRequestResponse>,
@@ -106,6 +110,10 @@ export function useGetCertificates<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Uses latest snapshots independently of installed compliance rules, applying viewer grants and API-key connector restrictions. Limits above 100 are capped at 100.
+ * @summary Certificates ordered by expiry across viewable connectors
+ */
 export function useGetCertificates<
   TData = Awaited<ReturnType<typeof getCertificates>>,
   TError = ErrorType<BadRequestResponse>,
@@ -125,6 +133,10 @@ export function useGetCertificates<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Uses latest snapshots independently of installed compliance rules, applying viewer grants and API-key connector restrictions. Limits above 100 are capped at 100.
+ * @summary Certificates ordered by expiry across viewable connectors
+ */
 export function useGetCertificates<
   TData = Awaited<ReturnType<typeof getCertificates>>,
   TError = ErrorType<BadRequestResponse>,
@@ -137,9 +149,9 @@ export function useGetCertificates<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Uses latest snapshots independently of installed compliance rules, applying viewer grants and API-key connector restrictions. Limits above 100 are capped at 100.
  * @summary Certificates ordered by expiry across viewable connectors
  */
-
 export function useGetCertificates<
   TData = Awaited<ReturnType<typeof getCertificates>>,
   TError = ErrorType<BadRequestResponse>,

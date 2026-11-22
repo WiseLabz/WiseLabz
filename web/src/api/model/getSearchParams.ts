@@ -9,18 +9,12 @@
 import type { GetSearchType } from './getSearchType';
 
 export type GetSearchParams = {
-  /**
-   * @maxLength 500
-   */
+  /** @maxLength 500 */
   q?: string;
   type?: GetSearchType;
-  /**
-   * @maxLength 128
-   */
+  /** @maxLength 128 */
   connector?: string;
-  /**
-   * @maxLength 100
-   */
+  /** @maxLength 100 */
   kind?: string;
   /**
    * @minimum 1

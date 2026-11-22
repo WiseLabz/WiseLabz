@@ -9,7 +9,7 @@ import { ExpiringCertificatesWidget } from './widgets';
 import { widgetsFromWire } from '../../store/dashboard';
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   cleanup();

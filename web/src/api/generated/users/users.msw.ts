@@ -7,9 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { User } from '../../model';
+import type { User, UserCreate, UserUpdate } from '../../model';
 
 import {
   getGetUsersResponseMock,
@@ -25,12 +25,12 @@ export {
 
 export const getGetUsersMockHandler = (
   overrideResponse?:
-    User[] | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<User[]> | User[]),
+    User[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<User[]> | User[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/users',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -46,12 +46,13 @@ export const getGetUsersMockHandler = (
 
 export const getPostUsersMockHandler = (
   overrideResponse?:
-    User | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<User> | User),
+    | User
+    | ((info: Parameters<HttpResponseResolver<PathParams, UserCreate>>[0]) => Promise<User> | User),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, UserCreate>(
     '*/users',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, UserCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -67,12 +68,15 @@ export const getPostUsersMockHandler = (
 
 export const getPatchUsersUserIdMockHandler = (
   overrideResponse?:
-    User | ((info: Parameters<Parameters<typeof http.patch>[1]>[0]) => Promise<User> | User),
+    | User
+    | ((
+        info: Parameters<HttpResponseResolver<{ userId: string }, UserUpdate>>[0]
+      ) => Promise<User> | User),
   options?: RequestHandlerOptions
 ) => {
-  return http.patch(
+  return http.patch<{ userId: string }, UserUpdate>(
     '*/users/:userId',
-    async (info: Parameters<Parameters<typeof http.patch>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ userId: string }, UserUpdate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -88,12 +92,13 @@ export const getPatchUsersUserIdMockHandler = (
 
 export const getDeleteUsersUserIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ userId: string }>(
     '*/users/:userId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -106,12 +111,13 @@ export const getDeleteUsersUserIdMockHandler = (
 
 export const getPostUsersUserIdResetPasswordMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ userId: string }>(
     '*/users/:userId/reset-password',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -124,12 +130,13 @@ export const getPostUsersUserIdResetPasswordMockHandler = (
 
 export const getPostUsersUserIdResetMfaMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ userId: string }>(
     '*/users/:userId/reset-mfa',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ userId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

@@ -96,6 +96,7 @@ export type GetChatConversationsQueryResult = NonNullable<
 >;
 export type GetChatConversationsQueryError = ErrorType<unknown>;
 
+/** @summary List the caller's "ask your lab" chat conversations, newest first */
 export function useGetChatConversations<
   TData = Awaited<ReturnType<typeof getChatConversations>>,
   TError = ErrorType<unknown>,
@@ -116,6 +117,7 @@ export function useGetChatConversations<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the caller's "ask your lab" chat conversations, newest first */
 export function useGetChatConversations<
   TData = Awaited<ReturnType<typeof getChatConversations>>,
   TError = ErrorType<unknown>,
@@ -136,6 +138,7 @@ export function useGetChatConversations<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the caller's "ask your lab" chat conversations, newest first */
 export function useGetChatConversations<
   TData = Awaited<ReturnType<typeof getChatConversations>>,
   TError = ErrorType<unknown>,
@@ -148,10 +151,7 @@ export function useGetChatConversations<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List the caller's "ask your lab" chat conversations, newest first
- */
-
+/** @summary List the caller's "ask your lab" chat conversations, newest first */
 export function useGetChatConversations<
   TData = Awaited<ReturnType<typeof getChatConversations>>,
   TError = ErrorType<unknown>,
@@ -238,9 +238,7 @@ export type PostChatConversationsMutationBody = BodyType<ChatConversationCreate>
 export type PostChatConversationsMutationError = ErrorType<BadRequestResponse>;
 export type PostChatConversationsMutationVariables = { data: BodyType<ChatConversationCreate> };
 
-/**
- * @summary Start a new chat conversation scoped to a doc or the whole lab
- */
+/** @summary Start a new chat conversation scoped to a doc or the whole lab */
 export const usePostChatConversations = <
   TError = ErrorType<BadRequestResponse>,
   TContext = unknown,
@@ -315,6 +313,7 @@ export type GetChatConversationsIdQueryResult = NonNullable<
 >;
 export type GetChatConversationsIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary A conversation plus its full message history */
 export function useGetChatConversationsId<
   TData = Awaited<ReturnType<typeof getChatConversationsId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -336,6 +335,7 @@ export function useGetChatConversationsId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A conversation plus its full message history */
 export function useGetChatConversationsId<
   TData = Awaited<ReturnType<typeof getChatConversationsId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -357,6 +357,7 @@ export function useGetChatConversationsId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A conversation plus its full message history */
 export function useGetChatConversationsId<
   TData = Awaited<ReturnType<typeof getChatConversationsId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -370,10 +371,7 @@ export function useGetChatConversationsId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary A conversation plus its full message history
- */
-
+/** @summary A conversation plus its full message history */
 export function useGetChatConversationsId<
   TData = Awaited<ReturnType<typeof getChatConversationsId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -466,9 +464,7 @@ export type PostChatConversationsIdMessagesMutationVariables = {
   data: BodyType<ChatMessageCreate>;
 };
 
-/**
- * @summary Ask a question in the conversation; retrieves matching doc sections and answers via the configured AI provider
- */
+/** @summary Ask a question in the conversation; retrieves matching doc sections and answers via the configured AI provider */
 export const usePostChatConversationsIdMessages = <
   TError = ErrorType<NotFoundResponse | Error>,
   TContext = unknown,

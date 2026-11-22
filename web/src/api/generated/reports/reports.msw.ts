@@ -7,9 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { Report, ReportDefinition, ReportPage } from '../../model';
+import type { Report, ReportDefinition, ReportDefinitionInput, ReportPage } from '../../model';
 
 import {
   getGetReportsDefinitionsResponseMock,
@@ -35,13 +35,13 @@ export const getGetReportsDefinitionsMockHandler = (
   overrideResponse?:
     | ReportDefinition[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<ReportDefinition[]> | ReportDefinition[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/reports/definitions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -59,13 +59,13 @@ export const getPostReportsDefinitionsMockHandler = (
   overrideResponse?:
     | ReportDefinition
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ReportDefinitionInput>>[0]
       ) => Promise<ReportDefinition> | ReportDefinition),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ReportDefinitionInput>(
     '*/reports/definitions',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ReportDefinitionInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -83,13 +83,19 @@ export const getPutReportsDefinitionsReportDefinitionIdMockHandler = (
   overrideResponse?:
     | ReportDefinition
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ reportDefinitionId: string }, ReportDefinitionInput>
+        >[0]
       ) => Promise<ReportDefinition> | ReportDefinition),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ reportDefinitionId: string }, ReportDefinitionInput>(
     '*/reports/definitions/:reportDefinitionId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ reportDefinitionId: string }, ReportDefinitionInput>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -105,12 +111,15 @@ export const getPutReportsDefinitionsReportDefinitionIdMockHandler = (
 
 export const getDeleteReportsDefinitionsReportDefinitionIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ reportDefinitionId: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ reportDefinitionId: string }>(
     '*/reports/definitions/:reportDefinitionId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ reportDefinitionId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -123,12 +132,15 @@ export const getDeleteReportsDefinitionsReportDefinitionIdMockHandler = (
 
 export const getPostReportsDefinitionsReportDefinitionIdRunMockHandler = (
   overrideResponse?:
-    Report | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Report> | Report),
+    | Report
+    | ((
+        info: Parameters<HttpResponseResolver<{ reportDefinitionId: string }>>[0]
+      ) => Promise<Report> | Report),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ reportDefinitionId: string }>(
     '*/reports/definitions/:reportDefinitionId/run',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ reportDefinitionId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -144,13 +156,12 @@ export const getPostReportsDefinitionsReportDefinitionIdRunMockHandler = (
 
 export const getGetReportsMockHandler = (
   overrideResponse?:
-    | ReportPage
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<ReportPage> | ReportPage),
+    ReportPage | ((info: Parameters<HttpResponseResolver>[0]) => Promise<ReportPage> | ReportPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/reports',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -166,12 +177,15 @@ export const getGetReportsMockHandler = (
 
 export const getGetReportsReportIdMockHandler = (
   overrideResponse?:
-    Report | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Report> | Report),
+    | Report
+    | ((
+        info: Parameters<HttpResponseResolver<{ reportId: string }>>[0]
+      ) => Promise<Report> | Report),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ reportId: string }>(
     '*/reports/:reportId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ reportId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -187,12 +201,15 @@ export const getGetReportsReportIdMockHandler = (
 
 export const getGetReportsReportIdDownloadMockHandler = (
   overrideResponse?:
-    string | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<string> | string),
+    | string
+    | ((
+        info: Parameters<HttpResponseResolver<{ reportId: string }>>[0]
+      ) => Promise<string> | string),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ reportId: string }>(
     '*/reports/:reportId/download',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ reportId: string }>>[0]) => {
       const resolvedBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

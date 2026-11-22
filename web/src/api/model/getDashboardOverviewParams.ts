@@ -9,8 +9,6 @@
 import type { DaysQueryParameter } from './daysQueryParameter';
 
 export type GetDashboardOverviewParams = {
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   days?: DaysQueryParameter;
 };

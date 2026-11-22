@@ -8,8 +8,6 @@
  */
 
 export type PostConnectorsConnectorIdRestartParams = {
-  /**
-   * true previews the restart without performing it; absent/false performs the real, elevation-gated restart.
-   */
+  /** true previews the restart without performing it; absent/false performs the real, elevation-gated restart. */
   dryRun?: boolean;
 };

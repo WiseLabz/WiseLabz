@@ -11,33 +11,21 @@ import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetSystemAuditParams = {
-  /**
-   * Exact match, e.g. `connector.create`
-   */
+  /** Exact match, e.g. `connector.create` */
   action?: string;
-  /**
-   * Exact match, e.g. `connector`, `doc`
-   */
+  /** Exact match, e.g. `connector`, `doc` */
   targetType?: string;
-  /**
-   * Only records with createdAt >= this RFC3339 timestamp
-   */
+  /** Only records with createdAt >= this RFC3339 timestamp */
   createdAfter?: string;
-  /**
-   * Only records with createdAt <= this RFC3339 timestamp
-   */
+  /** Only records with createdAt <= this RFC3339 timestamp */
   createdBefore?: string;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1
    * @maximum 100
    */
   pageSize?: PageSizeParameter;
-  /**
-   * Opt in to keyset (cursor) pagination, which stays cheap as the table grows. Send it empty for the first page, then echo back the previous response's `nextCursor` (or `X-Next-Cursor` header, where the response body is a bare array). The value is opaque and must not be constructed by clients. Omit the parameter entirely for offset pagination, whose behaviour is unchanged; `page` is ignored while a cursor is in use.
-   */
+  /** Opt in to keyset (cursor) pagination, which stays cheap as the table grows. Send it empty for the first page, then echo back the previous response's `nextCursor` (or `X-Next-Cursor` header, where the response body is a bare array). The value is opaque and must not be constructed by clients. Omit the parameter entirely for offset pagination, whose behaviour is unchanged; `page` is ignored while a cursor is in use. */
   cursor?: CursorParameter;
 };

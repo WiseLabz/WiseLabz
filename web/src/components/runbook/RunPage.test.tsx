@@ -33,7 +33,7 @@ const run: RunbookRun = {
 };
 
 beforeAll(async () => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
   // Load the route chunk before rendering so coverage instrumentation does not
   // consume the UI assertion's wait deadline.
   await import('./RunPage');

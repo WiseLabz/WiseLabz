@@ -98,6 +98,7 @@ export type GetComplianceSchemaQueryResult = NonNullable<
 >;
 export type GetComplianceSchemaQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary Connector entity attribute catalog for compliance rules (admin only) */
 export function useGetComplianceSchema<
   TData = Awaited<ReturnType<typeof getComplianceSchema>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -118,6 +119,7 @@ export function useGetComplianceSchema<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Connector entity attribute catalog for compliance rules (admin only) */
 export function useGetComplianceSchema<
   TData = Awaited<ReturnType<typeof getComplianceSchema>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -138,6 +140,7 @@ export function useGetComplianceSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Connector entity attribute catalog for compliance rules (admin only) */
 export function useGetComplianceSchema<
   TData = Awaited<ReturnType<typeof getComplianceSchema>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -150,10 +153,7 @@ export function useGetComplianceSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Connector entity attribute catalog for compliance rules (admin only)
- */
-
+/** @summary Connector entity attribute catalog for compliance rules (admin only) */
 export function useGetComplianceSchema<
   TData = Awaited<ReturnType<typeof getComplianceSchema>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -218,6 +218,7 @@ export type GetComplianceRulesQueryResult = NonNullable<
 >;
 export type GetComplianceRulesQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary List compliance rules (admin only) */
 export function useGetComplianceRules<
   TData = Awaited<ReturnType<typeof getComplianceRules>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -236,6 +237,7 @@ export function useGetComplianceRules<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List compliance rules (admin only) */
 export function useGetComplianceRules<
   TData = Awaited<ReturnType<typeof getComplianceRules>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -256,6 +258,7 @@ export function useGetComplianceRules<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List compliance rules (admin only) */
 export function useGetComplianceRules<
   TData = Awaited<ReturnType<typeof getComplianceRules>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -266,10 +269,7 @@ export function useGetComplianceRules<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List compliance rules (admin only)
- */
-
+/** @summary List compliance rules (admin only) */
 export function useGetComplianceRules<
   TData = Awaited<ReturnType<typeof getComplianceRules>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -354,9 +354,7 @@ export type PostComplianceRulesMutationBody = BodyType<ComplianceRuleInput>;
 export type PostComplianceRulesMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
 export type PostComplianceRulesMutationVariables = { data: BodyType<ComplianceRuleInput> };
 
-/**
- * @summary Create a compliance rule (admin only)
- */
+/** @summary Create a compliance rule (admin only) */
 export const usePostComplianceRules = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
   TContext = unknown,
@@ -431,6 +429,7 @@ export type GetComplianceRulesIdQueryResult = NonNullable<
 >;
 export type GetComplianceRulesIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Get a compliance rule (admin only) */
 export function useGetComplianceRulesId<
   TData = Awaited<ReturnType<typeof getComplianceRulesId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -452,6 +451,7 @@ export function useGetComplianceRulesId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a compliance rule (admin only) */
 export function useGetComplianceRulesId<
   TData = Awaited<ReturnType<typeof getComplianceRulesId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -473,6 +473,7 @@ export function useGetComplianceRulesId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get a compliance rule (admin only) */
 export function useGetComplianceRulesId<
   TData = Awaited<ReturnType<typeof getComplianceRulesId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -486,10 +487,7 @@ export function useGetComplianceRulesId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Get a compliance rule (admin only)
- */
-
+/** @summary Get a compliance rule (admin only) */
 export function useGetComplianceRulesId<
   TData = Awaited<ReturnType<typeof getComplianceRulesId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -581,9 +579,7 @@ export type PutComplianceRulesIdMutationVariables = {
   data: BodyType<ComplianceRuleInput>;
 };
 
-/**
- * @summary Replace a compliance rule (admin only)
- */
+/** @summary Replace a compliance rule (admin only) */
 export const usePutComplianceRulesId = <
   TError = ErrorType<BadRequestResponse | NotFoundResponse>,
   TContext = unknown,
@@ -665,9 +661,7 @@ export type DeleteComplianceRulesIdMutationResult = NonNullable<
 export type DeleteComplianceRulesIdMutationError = ErrorType<NotFoundResponse>;
 export type DeleteComplianceRulesIdMutationVariables = { id: string };
 
-/**
- * @summary Delete a compliance rule (admin only)
- */
+/** @summary Delete a compliance rule (admin only) */
 export const useDeleteComplianceRulesId = <
   TError = ErrorType<NotFoundResponse>,
   TContext = unknown,
@@ -755,9 +749,7 @@ export type PostComplianceRulesTestMutationBody = BodyType<ComplianceRuleInput>;
 export type PostComplianceRulesTestMutationError = ErrorType<BadRequestResponse>;
 export type PostComplianceRulesTestMutationVariables = { data: BodyType<ComplianceRuleInput> };
 
-/**
- * @summary Test an unsaved compliance rule without writing findings (admin only)
- */
+/** @summary Test an unsaved compliance rule without writing findings (admin only) */
 export const usePostComplianceRulesTest = <
   TError = ErrorType<BadRequestResponse>,
   TContext = unknown,
@@ -823,6 +815,7 @@ export type GetCompliancePacksQueryResult = NonNullable<
 >;
 export type GetCompliancePacksQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary List built-in compliance rule packs (admin only) */
 export function useGetCompliancePacks<
   TData = Awaited<ReturnType<typeof getCompliancePacks>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -841,6 +834,7 @@ export function useGetCompliancePacks<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List built-in compliance rule packs (admin only) */
 export function useGetCompliancePacks<
   TData = Awaited<ReturnType<typeof getCompliancePacks>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -861,6 +855,7 @@ export function useGetCompliancePacks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List built-in compliance rule packs (admin only) */
 export function useGetCompliancePacks<
   TData = Awaited<ReturnType<typeof getCompliancePacks>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -871,10 +866,7 @@ export function useGetCompliancePacks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List built-in compliance rule packs (admin only)
- */
-
+/** @summary List built-in compliance rule packs (admin only) */
 export function useGetCompliancePacks<
   TData = Awaited<ReturnType<typeof getCompliancePacks>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -956,9 +948,7 @@ export type PostCompliancePacksIdInstallMutationError = ErrorType<
 >;
 export type PostCompliancePacksIdInstallMutationVariables = { id: string };
 
-/**
- * @summary Install a built-in compliance rule pack, skipping rules whose name already exists (admin only)
- */
+/** @summary Install a built-in compliance rule pack, skipping rules whose name already exists (admin only) */
 export const usePostCompliancePacksIdInstall = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,

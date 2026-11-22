@@ -8,8 +8,6 @@
  */
 
 export type PostConnectorsConnectorIdStartParams = {
-  /**
-   * true previews the start without performing it; absent/false performs the real, elevation-gated start.
-   */
+  /** true previews the start without performing it; absent/false performs the real, elevation-gated start. */
   dryRun?: boolean;
 };

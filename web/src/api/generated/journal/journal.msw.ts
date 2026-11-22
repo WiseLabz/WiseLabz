@@ -7,9 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { JournalEntry, TimelineNarration, TimelinePage } from '../../model';
+import type { JournalEntry, JournalEntryInput, TimelineNarration, TimelinePage } from '../../model';
 
 import {
   getGetTimelineResponseMock,
@@ -28,14 +28,12 @@ export {
 export const getGetTimelineMockHandler = (
   overrideResponse?:
     | TimelinePage
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<TimelinePage> | TimelinePage),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<TimelinePage> | TimelinePage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/timeline',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -53,13 +51,13 @@ export const getPostTimelineNarrateMockHandler = (
   overrideResponse?:
     | TimelineNarration
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<TimelineNarration> | TimelineNarration),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/timeline/narrate',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -77,13 +75,13 @@ export const getPostJournalMockHandler = (
   overrideResponse?:
     | JournalEntry
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, JournalEntryInput>>[0]
       ) => Promise<JournalEntry> | JournalEntry),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, JournalEntryInput>(
     '*/journal',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, JournalEntryInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -101,13 +99,13 @@ export const getPutJournalIdMockHandler = (
   overrideResponse?:
     | JournalEntry
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }, JournalEntryInput>>[0]
       ) => Promise<JournalEntry> | JournalEntry),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ id: string }, JournalEntryInput>(
     '*/journal/:id',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }, JournalEntryInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -123,12 +121,12 @@ export const getPutJournalIdMockHandler = (
 
 export const getDeleteJournalIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ id: string }>(
     '*/journal/:id',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

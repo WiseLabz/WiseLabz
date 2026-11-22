@@ -8,8 +8,6 @@
  */
 
 export type PostConnectorsConnectorIdStopParams = {
-  /**
-   * true previews the stop without performing it; absent/false performs the real, elevation-gated stop.
-   */
+  /** true previews the stop without performing it; absent/false performs the real, elevation-gated stop. */
   dryRun?: boolean;
 };

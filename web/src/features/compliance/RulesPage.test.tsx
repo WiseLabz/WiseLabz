@@ -23,7 +23,7 @@ const server = setupServer(
   http.get('/api/compliance/schema', () => HttpResponse.json(schema)),
   http.get('/api/findings', () => HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 500 })),
 );
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => { server.resetHandlers(); cleanup(); });
 afterAll(() => server.close());
 

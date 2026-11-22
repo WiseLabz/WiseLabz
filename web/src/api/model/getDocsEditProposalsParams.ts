@@ -11,13 +11,9 @@ import type { PageParameter } from './pageParameter';
 import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetDocsEditProposalsParams = {
-  /**
-   * Defaults to pending.
-   */
+  /** Defaults to pending. */
   status?: GetDocsEditProposalsStatus;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

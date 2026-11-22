@@ -7,16 +7,21 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   ActionResult,
   ConfigField,
   Connector,
+  ConnectorBulkReauthRequest,
   ConnectorBulkReauthResponse,
+  ConnectorBulkRestartRequest,
   ConnectorBulkRestartResponse,
+  ConnectorBulkSyncRequest,
   ConnectorBulkSyncResponse,
+  ConnectorCreate,
   ConnectorTypeSchema,
+  ConnectorUpdate,
   DeleteConnectorsConnectorIdGoldenSnapshot200,
   DeleteConnectorsConnectorIdMaintenanceWindow200,
   FleetUptime,
@@ -25,8 +30,19 @@ import type {
   HealthCheckResult,
   LifecycleResult,
   MaintenanceWindow,
+  OpenMaintenanceWindowRequest,
+  PinGoldenSnapshotRequest,
+  PostConnectorsConnectorIdActionsNameBody,
+  PostConnectorsConnectorIdConfigPushBody,
+  PostConnectorsConnectorIdRestartBody,
+  PostConnectorsConnectorIdStartBody,
+  PostConnectorsConnectorIdStopBody,
+  PostConnectorsConnectorIdSyncBody,
+  PutConnectorsConnectorIdEnabledBody,
   PutConnectorsConnectorIdPermissionsUserId200,
+  PutConnectorsConnectorIdPermissionsUserIdBody,
   RecipePreview,
+  RecipePreviewInput,
   RemovalImpact,
   RestartPreview,
   ServiceSnapshot,
@@ -127,12 +143,12 @@ export {
 export const getGetConnectorsMockHandler = (
   overrideResponse?:
     | Connector[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Connector[]> | Connector[]),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Connector[]> | Connector[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/connectors',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -149,12 +165,14 @@ export const getGetConnectorsMockHandler = (
 export const getPostConnectorsMockHandler = (
   overrideResponse?:
     | Connector
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Connector> | Connector),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, ConnectorCreate>>[0]
+      ) => Promise<Connector> | Connector),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ConnectorCreate>(
     '*/connectors',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ConnectorCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -172,13 +190,13 @@ export const getPreviewConnectorRecipeMockHandler = (
   overrideResponse?:
     | RecipePreview
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, RecipePreviewInput>>[0]
       ) => Promise<RecipePreview> | RecipePreview),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, RecipePreviewInput>(
     '*/connectors/recipe-preview',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, RecipePreviewInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -196,13 +214,13 @@ export const getGetConnectorsSchemaMockHandler = (
   overrideResponse?:
     | ConnectorTypeSchema[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<ConnectorTypeSchema[]> | ConnectorTypeSchema[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/connectors/schema',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -219,12 +237,14 @@ export const getGetConnectorsSchemaMockHandler = (
 export const getGetConnectorsConnectorIdMockHandler = (
   overrideResponse?:
     | Connector
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Connector> | Connector),
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
+      ) => Promise<Connector> | Connector),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -241,12 +261,14 @@ export const getGetConnectorsConnectorIdMockHandler = (
 export const getPutConnectorsConnectorIdMockHandler = (
   overrideResponse?:
     | Connector
-    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<Connector> | Connector),
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }, ConnectorUpdate>>[0]
+      ) => Promise<Connector> | Connector),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ connectorId: string }, ConnectorUpdate>(
     '*/connectors/:connectorId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }, ConnectorUpdate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -262,12 +284,15 @@ export const getPutConnectorsConnectorIdMockHandler = (
 
 export const getDeleteConnectorsConnectorIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ connectorId: string }>(
     '*/connectors/:connectorId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -281,12 +306,14 @@ export const getDeleteConnectorsConnectorIdMockHandler = (
 export const getPostConnectorsConnectorIdReleaseMockHandler = (
   overrideResponse?:
     | Connector
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Connector> | Connector),
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
+      ) => Promise<Connector> | Connector),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }>(
     '*/connectors/:connectorId/release',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -304,13 +331,13 @@ export const getGetConnectorsConnectorIdRemovalImpactMockHandler = (
   overrideResponse?:
     | RemovalImpact
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<RemovalImpact> | RemovalImpact),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/removal-impact',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -329,13 +356,19 @@ export const getPostConnectorsConnectorIdRestartMockHandler = (
     | RestartPreview
     | LifecycleResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdRestartBody>
+        >[0]
       ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PostConnectorsConnectorIdRestartBody>(
     '*/connectors/:connectorId/restart',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdRestartBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -354,13 +387,19 @@ export const getPostConnectorsConnectorIdStartMockHandler = (
     | RestartPreview
     | LifecycleResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdStartBody>
+        >[0]
       ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PostConnectorsConnectorIdStartBody>(
     '*/connectors/:connectorId/start',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdStartBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -379,13 +418,19 @@ export const getPostConnectorsConnectorIdStopMockHandler = (
     | RestartPreview
     | LifecycleResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdStopBody>
+        >[0]
       ) => Promise<RestartPreview | LifecycleResult> | RestartPreview | LifecycleResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PostConnectorsConnectorIdStopBody>(
     '*/connectors/:connectorId/stop',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdStopBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -404,13 +449,25 @@ export const getPostConnectorsConnectorIdActionsNameMockHandler = (
     | RestartPreview
     | ActionResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<
+            { connectorId: string; name: string },
+            PostConnectorsConnectorIdActionsNameBody
+          >
+        >[0]
       ) => Promise<RestartPreview | ActionResult> | RestartPreview | ActionResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string; name: string }, PostConnectorsConnectorIdActionsNameBody>(
     '*/connectors/:connectorId/actions/:name',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<
+          { connectorId: string; name: string },
+          PostConnectorsConnectorIdActionsNameBody
+        >
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -428,13 +485,13 @@ export const getGetConnectorsConnectorIdConfigFieldsMockHandler = (
   overrideResponse?:
     | ConfigField[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<ConfigField[]> | ConfigField[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/config-fields',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -452,13 +509,19 @@ export const getPostConnectorsConnectorIdConfigPushMockHandler = (
   overrideResponse?:
     | ServiceSnapshot
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdConfigPushBody>
+        >[0]
       ) => Promise<ServiceSnapshot> | ServiceSnapshot),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PostConnectorsConnectorIdConfigPushBody>(
     '*/connectors/:connectorId/config-push',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdConfigPushBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -476,13 +539,13 @@ export const getGetConnectorsConnectorIdDataMockHandler = (
   overrideResponse?:
     | ServiceSnapshot
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<ServiceSnapshot> | ServiceSnapshot),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/data',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -500,13 +563,13 @@ export const getGetConnectorsConnectorIdUptimeMockHandler = (
   overrideResponse?:
     | UptimeReport
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<UptimeReport> | UptimeReport),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/uptime',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -524,13 +587,13 @@ export const getGetConnectorsConnectorIdUptimeHistoryMockHandler = (
   overrideResponse?:
     | UptimeHistory
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<UptimeHistory> | UptimeHistory),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/uptime/history',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -547,12 +610,12 @@ export const getGetConnectorsConnectorIdUptimeHistoryMockHandler = (
 export const getGetUptimeMockHandler = (
   overrideResponse?:
     | FleetUptime
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<FleetUptime> | FleetUptime),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<FleetUptime> | FleetUptime),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/uptime',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -569,12 +632,14 @@ export const getGetUptimeMockHandler = (
 export const getPostConnectorsConnectorIdTestMockHandler = (
   overrideResponse?:
     | TestResult
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<TestResult> | TestResult),
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
+      ) => Promise<TestResult> | TestResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }>(
     '*/connectors/:connectorId/test',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -592,13 +657,13 @@ export const getPostConnectorsConnectorIdHealthMockHandler = (
   overrideResponse?:
     | HealthCheckResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<HealthCheckResult> | HealthCheckResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }>(
     '*/connectors/:connectorId/health',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -615,12 +680,20 @@ export const getPostConnectorsConnectorIdHealthMockHandler = (
 export const getPostConnectorsConnectorIdSyncMockHandler = (
   overrideResponse?:
     | SyncJobRef
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<SyncJobRef> | SyncJobRef),
+    | ((
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdSyncBody>
+        >[0]
+      ) => Promise<SyncJobRef> | SyncJobRef),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PostConnectorsConnectorIdSyncBody>(
     '*/connectors/:connectorId/sync',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PostConnectorsConnectorIdSyncBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -637,12 +710,14 @@ export const getPostConnectorsConnectorIdSyncMockHandler = (
 export const getGetConnectorsConnectorIdSyncsMockHandler = (
   overrideResponse?:
     | SyncRun[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<SyncRun[]> | SyncRun[]),
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
+      ) => Promise<SyncRun[]> | SyncRun[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/syncs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -660,13 +735,13 @@ export const getGetConnectorsConnectorIdSnapshotsMockHandler = (
   overrideResponse?:
     | SnapshotSummary[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<SnapshotSummary[]> | SnapshotSummary[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/snapshots',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -685,13 +760,13 @@ export const getGetConnectorsConnectorIdSnapshotsDiffMockHandler = (
     | SnapshotDiff
     | string
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<SnapshotDiff | string> | SnapshotDiff | string),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/snapshots/diff',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       const resolvedBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -710,13 +785,15 @@ export const getGetConnectorsConnectorIdSnapshotsSnapshotIdMockHandler = (
   overrideResponse?:
     | SnapshotFull
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string; snapshotId: string }>>[0]
       ) => Promise<SnapshotFull> | SnapshotFull),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string; snapshotId: string }>(
     '*/connectors/:connectorId/snapshots/:snapshotId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<{ connectorId: string; snapshotId: string }>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -734,13 +811,13 @@ export const getPostConnectorsBulkSyncMockHandler = (
   overrideResponse?:
     | ConnectorBulkSyncResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkSyncRequest>>[0]
       ) => Promise<ConnectorBulkSyncResponse> | ConnectorBulkSyncResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ConnectorBulkSyncRequest>(
     '*/connectors/bulk-sync',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkSyncRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -758,13 +835,13 @@ export const getPostConnectorsBulkReauthMockHandler = (
   overrideResponse?:
     | ConnectorBulkReauthResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkReauthRequest>>[0]
       ) => Promise<ConnectorBulkReauthResponse> | ConnectorBulkReauthResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ConnectorBulkReauthRequest>(
     '*/connectors/bulk-reauth',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkReauthRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -782,13 +859,13 @@ export const getPostConnectorsBulkRestartMockHandler = (
   overrideResponse?:
     | ConnectorBulkRestartResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkRestartRequest>>[0]
       ) => Promise<ConnectorBulkRestartResponse> | ConnectorBulkRestartResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ConnectorBulkRestartRequest>(
     '*/connectors/bulk-restart',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ConnectorBulkRestartRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -805,12 +882,20 @@ export const getPostConnectorsBulkRestartMockHandler = (
 export const getPutConnectorsConnectorIdEnabledMockHandler = (
   overrideResponse?:
     | Connector
-    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<Connector> | Connector),
+    | ((
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, PutConnectorsConnectorIdEnabledBody>
+        >[0]
+      ) => Promise<Connector> | Connector),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ connectorId: string }, PutConnectorsConnectorIdEnabledBody>(
     '*/connectors/:connectorId/enabled',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, PutConnectorsConnectorIdEnabledBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -829,13 +914,13 @@ export const getGetConnectorsConnectorIdMaintenanceWindowMockHandler = (
     | MaintenanceWindow
     | null
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<MaintenanceWindow | null> | MaintenanceWindow | null),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/maintenance-window',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -853,13 +938,19 @@ export const getPostConnectorsConnectorIdMaintenanceWindowMockHandler = (
   overrideResponse?:
     | MaintenanceWindow
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ connectorId: string }, OpenMaintenanceWindowRequest>
+        >[0]
       ) => Promise<MaintenanceWindow> | MaintenanceWindow),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, OpenMaintenanceWindowRequest>(
     '*/connectors/:connectorId/maintenance-window',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ connectorId: string }, OpenMaintenanceWindowRequest>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -877,15 +968,15 @@ export const getDeleteConnectorsConnectorIdMaintenanceWindowMockHandler = (
   overrideResponse?:
     | DeleteConnectorsConnectorIdMaintenanceWindow200
     | ((
-        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) =>
         | Promise<DeleteConnectorsConnectorIdMaintenanceWindow200>
         | DeleteConnectorsConnectorIdMaintenanceWindow200),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ connectorId: string }>(
     '*/connectors/:connectorId/maintenance-window',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -904,13 +995,13 @@ export const getGetConnectorsConnectorIdGoldenSnapshotMockHandler = (
     | GoldenSnapshot
     | null
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) => Promise<GoldenSnapshot | null> | GoldenSnapshot | null),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/golden-snapshot',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -928,13 +1019,15 @@ export const getPostConnectorsConnectorIdGoldenSnapshotMockHandler = (
   overrideResponse?:
     | GoldenSnapshot
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }, PinGoldenSnapshotRequest>>[0]
       ) => Promise<GoldenSnapshot> | GoldenSnapshot),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ connectorId: string }, PinGoldenSnapshotRequest>(
     '*/connectors/:connectorId/golden-snapshot',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<{ connectorId: string }, PinGoldenSnapshotRequest>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -952,15 +1045,15 @@ export const getDeleteConnectorsConnectorIdGoldenSnapshotMockHandler = (
   overrideResponse?:
     | DeleteConnectorsConnectorIdGoldenSnapshot200
     | ((
-        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) =>
         | Promise<DeleteConnectorsConnectorIdGoldenSnapshot200>
         | DeleteConnectorsConnectorIdGoldenSnapshot200),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ connectorId: string }>(
     '*/connectors/:connectorId/golden-snapshot',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -978,13 +1071,13 @@ export const getGetConnectorsMaintenanceWindowsMockHandler = (
   overrideResponse?:
     | MaintenanceWindow[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<MaintenanceWindow[]> | MaintenanceWindow[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/connectors/maintenance-windows',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -1000,13 +1093,12 @@ export const getGetConnectorsMaintenanceWindowsMockHandler = (
 
 export const getPostSyncMockHandler = (
   overrideResponse?:
-    | SyncJobRef
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<SyncJobRef> | SyncJobRef),
+    SyncJobRef | ((info: Parameters<HttpResponseResolver>[0]) => Promise<SyncJobRef> | SyncJobRef),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/sync',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -1024,15 +1116,15 @@ export const getGetConnectorsConnectorIdPermissionsMockHandler = (
   overrideResponse?:
     | GetConnectorsConnectorIdPermissions200Item[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]
       ) =>
         | Promise<GetConnectorsConnectorIdPermissions200Item[]>
         | GetConnectorsConnectorIdPermissions200Item[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/connectors/:connectorId/permissions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -1050,15 +1142,30 @@ export const getPutConnectorsConnectorIdPermissionsUserIdMockHandler = (
   overrideResponse?:
     | PutConnectorsConnectorIdPermissionsUserId200
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<
+            { connectorId: string; userId: string },
+            PutConnectorsConnectorIdPermissionsUserIdBody
+          >
+        >[0]
       ) =>
         | Promise<PutConnectorsConnectorIdPermissionsUserId200>
         | PutConnectorsConnectorIdPermissionsUserId200),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<
+    { connectorId: string; userId: string },
+    PutConnectorsConnectorIdPermissionsUserIdBody
+  >(
     '*/connectors/:connectorId/permissions/:userId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<
+          { connectorId: string; userId: string },
+          PutConnectorsConnectorIdPermissionsUserIdBody
+        >
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -1074,12 +1181,15 @@ export const getPutConnectorsConnectorIdPermissionsUserIdMockHandler = (
 
 export const getDeleteConnectorsConnectorIdPermissionsUserIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ connectorId: string; userId: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ connectorId: string; userId: string }>(
     '*/connectors/:connectorId/permissions/:userId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string; userId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

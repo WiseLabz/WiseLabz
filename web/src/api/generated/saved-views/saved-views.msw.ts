@@ -7,9 +7,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { SavedView } from '../../model';
+import type { SavedView, SavedViewCreate } from '../../model';
 
 import { getGetSavedViewsResponseMock, getPostSavedViewsResponseMock } from './saved-views.faker';
 
@@ -18,12 +18,12 @@ export { getGetSavedViewsResponseMock, getPostSavedViewsResponseMock } from './s
 export const getGetSavedViewsMockHandler = (
   overrideResponse?:
     | SavedView[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<SavedView[]> | SavedView[]),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<SavedView[]> | SavedView[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/saved-views',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -40,12 +40,14 @@ export const getGetSavedViewsMockHandler = (
 export const getPostSavedViewsMockHandler = (
   overrideResponse?:
     | SavedView
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<SavedView> | SavedView),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, SavedViewCreate>>[0]
+      ) => Promise<SavedView> | SavedView),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, SavedViewCreate>(
     '*/saved-views',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, SavedViewCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -61,12 +63,15 @@ export const getPostSavedViewsMockHandler = (
 
 export const getDeleteSavedViewsSavedViewIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ savedViewId: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ savedViewId: string }>(
     '*/saved-views/:savedViewId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ savedViewId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

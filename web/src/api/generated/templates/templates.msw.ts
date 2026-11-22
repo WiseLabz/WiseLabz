@@ -7,10 +7,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
+  PostTemplatesTemplateIdPreviewBody,
   Template,
+  TemplateInput,
   TemplatePreviewResult,
   TemplateVersion,
   TemplateVersionMeta,
@@ -40,13 +42,12 @@ export {
 
 export const getGetTemplatesMockHandler = (
   overrideResponse?:
-    | Template[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Template[]> | Template[]),
+    Template[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Template[]> | Template[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/templates',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -63,12 +64,14 @@ export const getGetTemplatesMockHandler = (
 export const getPostTemplatesMockHandler = (
   overrideResponse?:
     | Template
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Template> | Template),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, TemplateInput>>[0]
+      ) => Promise<Template> | Template),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, TemplateInput>(
     '*/templates',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, TemplateInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -85,12 +88,14 @@ export const getPostTemplatesMockHandler = (
 export const getGetTemplatesTemplateIdMockHandler = (
   overrideResponse?:
     | Template
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Template> | Template),
+    | ((
+        info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]
+      ) => Promise<Template> | Template),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ templateId: string }>(
     '*/templates/:templateId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -107,12 +112,14 @@ export const getGetTemplatesTemplateIdMockHandler = (
 export const getPutTemplatesTemplateIdMockHandler = (
   overrideResponse?:
     | Template
-    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<Template> | Template),
+    | ((
+        info: Parameters<HttpResponseResolver<{ templateId: string }, TemplateInput>>[0]
+      ) => Promise<Template> | Template),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ templateId: string }, TemplateInput>(
     '*/templates/:templateId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string }, TemplateInput>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -128,12 +135,13 @@ export const getPutTemplatesTemplateIdMockHandler = (
 
 export const getDeleteTemplatesTemplateIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ templateId: string }>(
     '*/templates/:templateId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -148,13 +156,19 @@ export const getPostTemplatesTemplateIdPreviewMockHandler = (
   overrideResponse?:
     | TemplatePreviewResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ templateId: string }, PostTemplatesTemplateIdPreviewBody>
+        >[0]
       ) => Promise<TemplatePreviewResult> | TemplatePreviewResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ templateId: string }, PostTemplatesTemplateIdPreviewBody>(
     '*/templates/:templateId/preview',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ templateId: string }, PostTemplatesTemplateIdPreviewBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -172,13 +186,13 @@ export const getGetTemplatesTemplateIdVersionsMockHandler = (
   overrideResponse?:
     | TemplateVersionMeta[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]
       ) => Promise<TemplateVersionMeta[]> | TemplateVersionMeta[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ templateId: string }>(
     '*/templates/:templateId/versions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -196,13 +210,13 @@ export const getGetTemplatesTemplateIdVersionsRevMockHandler = (
   overrideResponse?:
     | TemplateVersion
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ templateId: string; rev: string }>>[0]
       ) => Promise<TemplateVersion> | TemplateVersion),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ templateId: string; rev: string }>(
     '*/templates/:templateId/versions/:rev',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string; rev: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -219,12 +233,14 @@ export const getGetTemplatesTemplateIdVersionsRevMockHandler = (
 export const getPostTemplatesTemplateIdVersionsRevRestoreMockHandler = (
   overrideResponse?:
     | Template
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Template> | Template),
+    | ((
+        info: Parameters<HttpResponseResolver<{ templateId: string; rev: string }>>[0]
+      ) => Promise<Template> | Template),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ templateId: string; rev: string }>(
     '*/templates/:templateId/versions/:rev/restore',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ templateId: string; rev: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

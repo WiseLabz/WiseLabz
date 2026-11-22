@@ -7,13 +7,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   AiSuggestRef,
+  AiSuggestRequest,
   Doc,
   DocAttachment,
   DocBacklink,
+  DocCreate,
   DocEditProposal,
   DocEditProposalPage,
   DocImportCreated,
@@ -21,13 +23,20 @@ import type {
   DocLock,
   DocNode,
   DocPage,
+  DocPatch,
   DocPullJob,
+  DocPullRequest,
+  DocSave,
   DocVersion,
   DocVersionMeta,
   GenerateResult,
   GetDocsShareLinks200Item,
   GetShareTokenTree200,
+  PostDocsDocIdAttachmentsBody,
+  PostDocsGenerateBody,
+  PostDocsImportBody,
   PostDocsShareLinks201,
+  PostDocsShareLinksBody,
   TemplateSchema,
 } from '../../model';
 
@@ -111,12 +120,12 @@ export {
 
 export const getGetDocsMockHandler = (
   overrideResponse?:
-    DocPage | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocPage> | DocPage),
+    DocPage | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DocPage> | DocPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -132,12 +141,13 @@ export const getGetDocsMockHandler = (
 
 export const getPostDocsMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((info: Parameters<HttpResponseResolver<PathParams, DocCreate>>[0]) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, DocCreate>(
     '*/docs',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, DocCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -153,12 +163,12 @@ export const getPostDocsMockHandler = (
 
 export const getGetDocsTrashMockHandler = (
   overrideResponse?:
-    Doc[] | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc[]> | Doc[]),
+    Doc[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Doc[]> | Doc[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/trash',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -173,25 +183,22 @@ export const getGetDocsTrashMockHandler = (
 };
 
 export const getGetDocsExportMockHandler = (
-  overrideResponse?:
-    | unknown
-    | Blob
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<unknown | Blob> | unknown | Blob),
+  overrideResponse?: Blob | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Blob> | Blob),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/export',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
-      return HttpResponse.json(
+    async (info: Parameters<HttpResponseResolver>[0]) => {
+      const binaryBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
             ? await overrideResponse(info)
             : overrideResponse
-          : getGetDocsExportResponseMock(),
-        { status: 200 }
-      );
+          : getGetDocsExportResponseMock();
+      return new HttpResponse(binaryBody, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
     },
     options
   );
@@ -201,13 +208,13 @@ export const getPostDocsImportMockHandler = (
   overrideResponse?:
     | DocImportPreview
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostDocsImportBody>>[0]
       ) => Promise<DocImportPreview> | DocImportPreview),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostDocsImportBody>(
     '*/docs/import',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PostDocsImportBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -224,12 +231,14 @@ export const getPostDocsImportMockHandler = (
 export const getPostDocsImportPullMockHandler = (
   overrideResponse?:
     | DocPullJob
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<DocPullJob> | DocPullJob),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, DocPullRequest>>[0]
+      ) => Promise<DocPullJob> | DocPullJob),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, DocPullRequest>(
     '*/docs/import/pull',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, DocPullRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -245,13 +254,12 @@ export const getPostDocsImportPullMockHandler = (
 
 export const getGetDocsImportPullMockHandler = (
   overrideResponse?:
-    | DocPullJob
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocPullJob> | DocPullJob),
+    DocPullJob | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DocPullJob> | DocPullJob),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/import/pull',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -267,15 +275,12 @@ export const getGetDocsImportPullMockHandler = (
 
 export const getDeleteDocsImportPullMockHandler = (
   overrideResponse?:
-    | DocPullJob
-    | ((
-        info: Parameters<Parameters<typeof http.delete>[1]>[0]
-      ) => Promise<DocPullJob> | DocPullJob),
+    DocPullJob | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DocPullJob> | DocPullJob),
   options?: RequestHandlerOptions
 ) => {
   return http.delete(
     '*/docs/import/pull',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -293,13 +298,13 @@ export const getPostDocsImportImportIdCommitMockHandler = (
   overrideResponse?:
     | DocImportCreated[]
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ importId: string }>>[0]
       ) => Promise<DocImportCreated[]> | DocImportCreated[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ importId: string }>(
     '*/docs/import/:importId/commit',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ importId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -315,12 +320,12 @@ export const getPostDocsImportImportIdCommitMockHandler = (
 
 export const getPostDocsDocIdRestoreMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Doc> | Doc),
+    Doc | ((info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string }>(
     '*/docs/:docId/restore',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -336,12 +341,12 @@ export const getPostDocsDocIdRestoreMockHandler = (
 
 export const getGetDocsTreeMockHandler = (
   overrideResponse?:
-    DocNode | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocNode> | DocNode),
+    DocNode | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DocNode> | DocNode),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/tree',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -357,12 +362,13 @@ export const getGetDocsTreeMockHandler = (
 
 export const getGetDocsServiceConnectorIdMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ connectorId: string }>(
     '*/docs/service/:connectorId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ connectorId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -378,12 +384,12 @@ export const getGetDocsServiceConnectorIdMockHandler = (
 
 export const getGetDocsDocIdMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc> | Doc),
+    Doc | ((info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string }>(
     '*/docs/:docId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -399,12 +405,15 @@ export const getGetDocsDocIdMockHandler = (
 
 export const getPutDocsDocIdMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string }, DocSave>>[0]
+      ) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ docId: string }, DocSave>(
     '*/docs/:docId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }, DocSave>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -420,12 +429,15 @@ export const getPutDocsDocIdMockHandler = (
 
 export const getPatchDocsDocIdMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.patch>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string }, DocPatch>>[0]
+      ) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.patch(
+  return http.patch<{ docId: string }, DocPatch>(
     '*/docs/:docId',
-    async (info: Parameters<Parameters<typeof http.patch>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }, DocPatch>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -441,12 +453,12 @@ export const getPatchDocsDocIdMockHandler = (
 
 export const getDeleteDocsDocIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ docId: string }>(
     '*/docs/:docId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -461,13 +473,13 @@ export const getGetDocsDocIdBacklinksMockHandler = (
   overrideResponse?:
     | DocBacklink[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ docId: string }>>[0]
       ) => Promise<DocBacklink[]> | DocBacklink[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string }>(
     '*/docs/:docId/backlinks',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -485,13 +497,13 @@ export const getGetDocsDocIdAttachmentsMockHandler = (
   overrideResponse?:
     | DocAttachment[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ docId: string }>>[0]
       ) => Promise<DocAttachment[]> | DocAttachment[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string }>(
     '*/docs/:docId/attachments',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -509,13 +521,15 @@ export const getPostDocsDocIdAttachmentsMockHandler = (
   overrideResponse?:
     | DocAttachment
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ docId: string }, PostDocsDocIdAttachmentsBody>>[0]
       ) => Promise<DocAttachment> | DocAttachment),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string }, PostDocsDocIdAttachmentsBody>(
     '*/docs/:docId/attachments',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<{ docId: string }, PostDocsDocIdAttachmentsBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -531,12 +545,15 @@ export const getPostDocsDocIdAttachmentsMockHandler = (
 
 export const getDeleteDocsDocIdAttachmentsAidMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string; aid: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ docId: string; aid: string }>(
     '*/docs/:docId/attachments/:aid',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string; aid: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -549,12 +566,12 @@ export const getDeleteDocsDocIdAttachmentsAidMockHandler = (
 
 export const getGetAttachmentsAidRawMockHandler = (
   overrideResponse?:
-    Blob | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Blob> | Blob),
+    Blob | ((info: Parameters<HttpResponseResolver<{ aid: string }>>[0]) => Promise<Blob> | Blob),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ aid: string }>(
     '*/attachments/:aid/raw',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ aid: string }>>[0]) => {
       const binaryBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -574,13 +591,13 @@ export const getGetDocsDocIdVersionsMockHandler = (
   overrideResponse?:
     | DocVersionMeta[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ docId: string }>>[0]
       ) => Promise<DocVersionMeta[]> | DocVersionMeta[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string }>(
     '*/docs/:docId/versions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -597,12 +614,14 @@ export const getGetDocsDocIdVersionsMockHandler = (
 export const getGetDocsDocIdVersionsRevMockHandler = (
   overrideResponse?:
     | DocVersion
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocVersion> | DocVersion),
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string; rev: string }>>[0]
+      ) => Promise<DocVersion> | DocVersion),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string; rev: string }>(
     '*/docs/:docId/versions/:rev',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string; rev: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -618,12 +637,15 @@ export const getGetDocsDocIdVersionsRevMockHandler = (
 
 export const getPostDocsDocIdVersionsRevRestoreMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string; rev: string }>>[0]
+      ) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string; rev: string }>(
     '*/docs/:docId/versions/:rev/restore',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string; rev: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -641,13 +663,13 @@ export const getPostDocsDocIdAiSuggestMockHandler = (
   overrideResponse?:
     | AiSuggestRef
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ docId: string }, AiSuggestRequest>>[0]
       ) => Promise<AiSuggestRef> | AiSuggestRef),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string }, AiSuggestRequest>(
     '*/docs/:docId/ai-suggest',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }, AiSuggestRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -663,12 +685,15 @@ export const getPostDocsDocIdAiSuggestMockHandler = (
 
 export const getGetDocsDocIdLockMockHandler = (
   overrideResponse?:
-    DocLock | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<DocLock> | DocLock),
+    | DocLock
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string }>>[0]
+      ) => Promise<DocLock> | DocLock),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ docId: string }>(
     '*/docs/:docId/lock',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -685,12 +710,14 @@ export const getGetDocsDocIdLockMockHandler = (
 export const getPostDocsDocIdLockMockHandler = (
   overrideResponse?:
     | DocLock
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<DocLock> | DocLock),
+    | ((
+        info: Parameters<HttpResponseResolver<{ docId: string }>>[0]
+      ) => Promise<DocLock> | DocLock),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string }>(
     '*/docs/:docId/lock',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -706,12 +733,12 @@ export const getPostDocsDocIdLockMockHandler = (
 
 export const getPostDocsDocIdLockReleaseMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ docId: string }>(
     '*/docs/:docId/lock/release',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ docId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -726,13 +753,13 @@ export const getGetDocsEditProposalsMockHandler = (
   overrideResponse?:
     | DocEditProposalPage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DocEditProposalPage> | DocEditProposalPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/edit-proposals',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -750,13 +777,13 @@ export const getGetDocsEditProposalsProposalIdMockHandler = (
   overrideResponse?:
     | DocEditProposal
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]
       ) => Promise<DocEditProposal> | DocEditProposal),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ proposalId: string }>(
     '*/docs/edit-proposals/:proposalId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -774,13 +801,13 @@ export const getPostDocsEditProposalsProposalIdApproveMockHandler = (
   overrideResponse?:
     | DocEditProposal
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]
       ) => Promise<DocEditProposal> | DocEditProposal),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ proposalId: string }>(
     '*/docs/edit-proposals/:proposalId/approve',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -798,13 +825,13 @@ export const getPostDocsEditProposalsProposalIdRejectMockHandler = (
   overrideResponse?:
     | DocEditProposal
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]
       ) => Promise<DocEditProposal> | DocEditProposal),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ proposalId: string }>(
     '*/docs/edit-proposals/:proposalId/reject',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ proposalId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -821,14 +848,12 @@ export const getPostDocsEditProposalsProposalIdRejectMockHandler = (
 export const getGetDocsTemplateSchemaMockHandler = (
   overrideResponse?:
     | TemplateSchema
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<TemplateSchema> | TemplateSchema),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<TemplateSchema> | TemplateSchema),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/template-schema',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -846,13 +871,13 @@ export const getPostDocsGenerateMockHandler = (
   overrideResponse?:
     | GenerateResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostDocsGenerateBody>>[0]
       ) => Promise<GenerateResult> | GenerateResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostDocsGenerateBody>(
     '*/docs/generate',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PostDocsGenerateBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -869,14 +894,12 @@ export const getPostDocsGenerateMockHandler = (
 export const getPostDocsTopologyMockHandler = (
   overrideResponse?:
     | GenerateResult
-    | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<GenerateResult> | GenerateResult),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<GenerateResult> | GenerateResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/docs/topology',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -894,13 +917,13 @@ export const getGetDocsShareLinksMockHandler = (
   overrideResponse?:
     | GetDocsShareLinks200Item[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<GetDocsShareLinks200Item[]> | GetDocsShareLinks200Item[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/docs/share-links',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -918,13 +941,13 @@ export const getPostDocsShareLinksMockHandler = (
   overrideResponse?:
     | PostDocsShareLinks201
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostDocsShareLinksBody>>[0]
       ) => Promise<PostDocsShareLinks201> | PostDocsShareLinks201),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostDocsShareLinksBody>(
     '*/docs/share-links',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PostDocsShareLinksBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -940,12 +963,12 @@ export const getPostDocsShareLinksMockHandler = (
 
 export const getDeleteDocsShareLinksIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ id: string }>(
     '*/docs/share-links/:id',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -960,13 +983,13 @@ export const getGetShareTokenTreeMockHandler = (
   overrideResponse?:
     | GetShareTokenTree200
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ token: string }>>[0]
       ) => Promise<GetShareTokenTree200> | GetShareTokenTree200),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ token: string }>(
     '*/share/:token/tree',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ token: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -982,12 +1005,15 @@ export const getGetShareTokenTreeMockHandler = (
 
 export const getGetShareTokenDocsDocIdMockHandler = (
   overrideResponse?:
-    Doc | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Doc> | Doc),
+    | Doc
+    | ((
+        info: Parameters<HttpResponseResolver<{ token: string; docId: string }>>[0]
+      ) => Promise<Doc> | Doc),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ token: string; docId: string }>(
     '*/share/:token/docs/:docId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ token: string; docId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

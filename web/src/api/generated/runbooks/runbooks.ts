@@ -109,6 +109,10 @@ export const getGetRunbooksQueryOptions = <
 export type GetRunbooksQueryResult = NonNullable<Awaited<ReturnType<typeof getRunbooks>>>;
 export type GetRunbooksQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
 
+/**
+ * `changeType`, `alertSeverity`, and `findingCheckType` are mutually exclusive filters — pass at most one. `changeType` matches target_type=change_type / target_value=<changeType>; `alertSeverity` matches target_type=alert_severity / target_value=<alertSeverity>; `findingCheckType` matches target_type=finding_check_type / target_value=<findingCheckType>. With none given, returns all runbooks.
+ * @summary List runbooks, optionally filtered by change type or alert severity
+ */
 export function useGetRunbooks<
   TData = Awaited<ReturnType<typeof getRunbooks>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -128,6 +132,10 @@ export function useGetRunbooks<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * `changeType`, `alertSeverity`, and `findingCheckType` are mutually exclusive filters — pass at most one. `changeType` matches target_type=change_type / target_value=<changeType>; `alertSeverity` matches target_type=alert_severity / target_value=<alertSeverity>; `findingCheckType` matches target_type=finding_check_type / target_value=<findingCheckType>. With none given, returns all runbooks.
+ * @summary List runbooks, optionally filtered by change type or alert severity
+ */
 export function useGetRunbooks<
   TData = Awaited<ReturnType<typeof getRunbooks>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -147,6 +155,10 @@ export function useGetRunbooks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * `changeType`, `alertSeverity`, and `findingCheckType` are mutually exclusive filters — pass at most one. `changeType` matches target_type=change_type / target_value=<changeType>; `alertSeverity` matches target_type=alert_severity / target_value=<alertSeverity>; `findingCheckType` matches target_type=finding_check_type / target_value=<findingCheckType>. With none given, returns all runbooks.
+ * @summary List runbooks, optionally filtered by change type or alert severity
+ */
 export function useGetRunbooks<
   TData = Awaited<ReturnType<typeof getRunbooks>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -159,9 +171,9 @@ export function useGetRunbooks<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * `changeType`, `alertSeverity`, and `findingCheckType` are mutually exclusive filters — pass at most one. `changeType` matches target_type=change_type / target_value=<changeType>; `alertSeverity` matches target_type=alert_severity / target_value=<alertSeverity>; `findingCheckType` matches target_type=finding_check_type / target_value=<findingCheckType>. With none given, returns all runbooks.
  * @summary List runbooks, optionally filtered by change type or alert severity
  */
-
 export function useGetRunbooks<
   TData = Awaited<ReturnType<typeof getRunbooks>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -247,9 +259,7 @@ export type PostRunbooksMutationError = ErrorType<
 >;
 export type PostRunbooksMutationVariables = { data: BodyType<RunbookCreate> };
 
-/**
- * @summary Create a runbook (operator)
- */
+/** @summary Create a runbook (operator) */
 export const usePostRunbooks = <
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse | ForbiddenResponse>,
   TContext = unknown,
@@ -321,6 +331,7 @@ export type GetRunbooksRunbookIdQueryResult = NonNullable<
 >;
 export type GetRunbooksRunbookIdQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>;
 
+/** @summary One runbook */
 export function useGetRunbooksRunbookId<
   TData = Awaited<ReturnType<typeof getRunbooksRunbookId>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -342,6 +353,7 @@ export function useGetRunbooksRunbookId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One runbook */
 export function useGetRunbooksRunbookId<
   TData = Awaited<ReturnType<typeof getRunbooksRunbookId>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -363,6 +375,7 @@ export function useGetRunbooksRunbookId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One runbook */
 export function useGetRunbooksRunbookId<
   TData = Awaited<ReturnType<typeof getRunbooksRunbookId>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -376,10 +389,7 @@ export function useGetRunbooksRunbookId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One runbook
- */
-
+/** @summary One runbook */
 export function useGetRunbooksRunbookId<
   TData = Awaited<ReturnType<typeof getRunbooksRunbookId>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -475,9 +485,7 @@ export type PutRunbooksRunbookIdMutationVariables = {
   data: BodyType<RunbookUpdate>;
 };
 
-/**
- * @summary Update a runbook (operator)
- */
+/** @summary Update a runbook (operator) */
 export const usePutRunbooksRunbookId = <
   TError = ErrorType<
     BadRequestResponse | UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
@@ -560,9 +568,7 @@ export type DeleteRunbooksRunbookIdMutationError = ErrorType<
 >;
 export type DeleteRunbooksRunbookIdMutationVariables = { runbookId: string };
 
-/**
- * @summary Delete a runbook (operator)
- */
+/** @summary Delete a runbook (operator) */
 export const useDeleteRunbooksRunbookId = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -654,6 +660,7 @@ export type ExecuteRunbookStepMutationVariables = {
 };
 
 /**
+ * Only lifecycle steps can be executed on their own. The operator grant on the step's connector is checked first (403), so the answer does not depend on the step's kind; then a step that is not a lifecycle step is rejected with 400 `unsupported_step_kind` and a lifecycle step without a verb with 400 `invalid_step`. A step with no connector (a manual step) is rejected with 400 directly. Resolves the target connector, verb, and entityRef from the stored step — the request body is ignored — and runs the exact same dry-run-preview / elevation-gated-mutate path as the connector-level restart/start/stop endpoints (see ADR 0001/0002). Linking a step grants nothing on its own: the caller must additionally hold at least an operator grant on the step's connector, and a real (non dry-run) execution still requires a valid X-Elevation-Token for action `connector.<verb>`. On success, records a `connector.<verb>` audit row whose detail includes this runbookId/stepId in addition to entityRef.
  * @summary Execute (or preview) one runbook step's lifecycle operation
  */
 export const useExecuteRunbookStep = <
@@ -745,6 +752,7 @@ export type StartRunbookRunMutationVariables = {
 };
 
 /**
+ * dryRun=true returns the ordered, redacted preview without elevation or mutation. Starting requires operator on every referenced connector (including API-key restrictions) before any other rejection, and one fresh runbook.run elevation targeted at runbookId. Steps are frozen when requested or started. An empty runbook cannot start. Opted-in runbooks require an eligible other operator before elevation is consumed and create awaiting_approval runs with no step execution. Ordinary runbooks keep their existing start response. Single-step execution of an opted-in runbook returns 409 approval_required. When the runbook has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Preview or start a whole-runbook run
  */
 export const useStartRunbookRun = <
@@ -819,6 +827,7 @@ export const getListRunbookRunsQueryOptions = <
 export type ListRunbookRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listRunbookRuns>>>;
 export type ListRunbookRunsQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>;
 
+/** @summary Run history, newest first with frozen redacted steps */
 export function useListRunbookRuns<
   TData = Awaited<ReturnType<typeof listRunbookRuns>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -839,6 +848,7 @@ export function useListRunbookRuns<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Run history, newest first with frozen redacted steps */
 export function useListRunbookRuns<
   TData = Awaited<ReturnType<typeof listRunbookRuns>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -859,6 +869,7 @@ export function useListRunbookRuns<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Run history, newest first with frozen redacted steps */
 export function useListRunbookRuns<
   TData = Awaited<ReturnType<typeof listRunbookRuns>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -871,10 +882,7 @@ export function useListRunbookRuns<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Run history, newest first with frozen redacted steps
- */
-
+/** @summary Run history, newest first with frozen redacted steps */
 export function useListRunbookRuns<
   TData = Awaited<ReturnType<typeof listRunbookRuns>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -944,6 +952,7 @@ export const getGetRunbookRunQueryOptions = <
 export type GetRunbookRunQueryResult = NonNullable<Awaited<ReturnType<typeof getRunbookRun>>>;
 export type GetRunbookRunQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>;
 
+/** @summary Read a run, including after its runbook was deleted */
 export function useGetRunbookRun<
   TData = Awaited<ReturnType<typeof getRunbookRun>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -963,6 +972,7 @@ export function useGetRunbookRun<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read a run, including after its runbook was deleted */
 export function useGetRunbookRun<
   TData = Awaited<ReturnType<typeof getRunbookRun>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -982,6 +992,7 @@ export function useGetRunbookRun<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read a run, including after its runbook was deleted */
 export function useGetRunbookRun<
   TData = Awaited<ReturnType<typeof getRunbookRun>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -993,10 +1004,7 @@ export function useGetRunbookRun<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Read a run, including after its runbook was deleted
- */
-
+/** @summary Read a run, including after its runbook was deleted */
 export function useGetRunbookRun<
   TData = Awaited<ReturnType<typeof getRunbookRun>>,
   TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
@@ -1080,6 +1088,7 @@ export type ApproveRunbookRunMutationError = ErrorType<
 export type ApproveRunbookRunMutationVariables = { runId: string };
 
 /**
+ * Requires an enabled user other than the initiator with operator access on every frozen connector, including API-key restrictions; read-only keys are forbidden. Connectorless runs require instance admin or operator on at least one connector. The approver must present their own fresh single-use runbook.approve elevation targeted at runId (always required regardless of the instance step-up setting; API keys can never approve); runbook.run is refused. The conditional awaiting_approval transition records the approver and starts execution as the initiator, preserving the existing per-step initiator grant rechecks.
  * @summary Approve a frozen request as a different operator
  */
 export const useApproveRunbookRun = <
@@ -1167,6 +1176,7 @@ export type RejectRunbookRunMutationError = ErrorType<
 export type RejectRunbookRunMutationVariables = { runId: string };
 
 /**
+ * Uses the same current enabled-user, all-frozen-connector operator and API-key checks as approve, prohibits the initiator, and requires no elevation. Conditionally moves awaiting_approval to rejected, records rejectedBy and finishedAt, and skips pending steps.
  * @summary Reject a frozen request as a different operator
  */
 export const useRejectRunbookRun = <
@@ -1255,6 +1265,7 @@ export type ConfirmRunbookRunStepMutationError = ErrorType<
 export type ConfirmRunbookRunStepMutationVariables = { runId: string; stepId: string };
 
 /**
+ * Requires operator on every connector of the frozen run (API-key restrictions apply), checked before state or step validation. No elevation. Available after runbook deletion. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Confirm a waiting manual step and continue
  */
 export const useConfirmRunbookRunStep = <
@@ -1352,6 +1363,7 @@ export type ResumeRunbookRunMutationVariables = {
 };
 
 /**
+ * Requires operator on every frozen connector before state or elevation validation, and a fresh single-use runbook.run elevation targeted at the runbook id. When the run has no connector to check (manual steps only), the caller must be an instance admin or hold operator on at least one connector. Continues from the first non-succeeded step, including unknown outcomes. When that first step is a connector_action or config_push step in state unknown, the body must carry a decision: resend retries the frozen step (config pushes retain already-at-target no-op detection) (audited as runbook.run.step_resent), mark_done marks the step succeeded without sending anything (audited as runbook.run.step_marked_done). Without a decision the request is rejected with 409 unknown_step_decision_required and the run stays failed. Mark done is intended for an operator who manually verified the result. The decision is ignored for every other first step, and an unknown lifecycle step repeats without one. A deleted runbook cannot be resumed because its elevation target no longer exists: returns 409 runbook_deleted; history, cancellation and manual confirmation remain available. The decision is tied to what the operator saw: stepId is the step it is for and updatedAt is the run's updatedAt exactly as the client received it. When either is present and the run no longer matches (updatedAt differs, or stepId is not the first non-succeeded step), the request is rejected with 409 run_changed carrying the run's current state and updatedAt, and nothing changes, is sent or is audited. The comparison is made in the same transaction as the state change. A decision on an unknown connector_action or config_push step requires both fields (400 otherwise); elsewhere they are optional but still checked when present.
  * @summary Resume a failed run with fresh elevation
  */
 export const useResumeRunbookRun = <
@@ -1439,6 +1451,7 @@ export type CancelRunbookRunMutationError = ErrorType<
 export type CancelRunbookRunMutationVariables = { runId: string };
 
 /**
+ * Requires operator on every frozen connector (API-key restrictions apply), checked before state. No elevation. Stops execution before its next step and records the cancelling user. The same guards withdraw an awaiting_approval request: the run becomes cancelled, its pending steps are skipped and nothing is executed. Available after runbook deletion. Connectors deleted since the run started do not count toward the grant requirement for cancellation (confirm and resume still require every frozen connector). When the run has no connector to check (manual steps only, or every connector was deleted), the caller must be an instance admin or hold operator on at least one connector.
  * @summary Cancel a running, waiting or failed run, or withdraw an awaiting approval request
  */
 export const useCancelRunbookRun = <

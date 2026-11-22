@@ -7,17 +7,26 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   ApiKey,
+  ApiKeyCreate,
   ApiKeyCreated,
   AuthProviders,
   AuthSession,
+  ElevationRequest,
   ElevationToken,
   GetAuthElevateMethods200,
+  LoginMfaRequest,
   LoginMfaRequired,
+  LoginRequest,
+  OidcCallbackRequest,
   PostAuthElevateOidcBegin200,
+  PostAuthElevateOidcBeginBody,
+  PostAuthElevateOidcCompleteBody,
+  PostAuthElevateWebauthnBeginBody,
+  PostAuthLoginMfaWebauthnBeginBody,
   WebAuthnOptions,
 } from '../../model';
 
@@ -56,14 +65,12 @@ export {
 export const getGetAuthProvidersMockHandler = (
   overrideResponse?:
     | AuthProviders
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<AuthProviders> | AuthProviders),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AuthProviders> | AuthProviders),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/auth/providers',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -82,13 +89,13 @@ export const getPostAuthLoginMockHandler = (
     | AuthSession
     | LoginMfaRequired
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, LoginRequest>>[0]
       ) => Promise<AuthSession | LoginMfaRequired> | AuthSession | LoginMfaRequired),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, LoginRequest>(
     '*/auth/login',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, LoginRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -106,13 +113,13 @@ export const getPostAuthLoginMfaMockHandler = (
   overrideResponse?:
     | AuthSession
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, LoginMfaRequest>>[0]
       ) => Promise<AuthSession> | AuthSession),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, LoginMfaRequest>(
     '*/auth/login/mfa',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, LoginMfaRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -130,13 +137,15 @@ export const getPostAuthLoginMfaWebauthnBeginMockHandler = (
   overrideResponse?:
     | WebAuthnOptions
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostAuthLoginMfaWebauthnBeginBody>>[0]
       ) => Promise<WebAuthnOptions> | WebAuthnOptions),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostAuthLoginMfaWebauthnBeginBody>(
     '*/auth/login/mfa/webauthn/begin',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<PathParams, PostAuthLoginMfaWebauthnBeginBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -154,13 +163,13 @@ export const getPostAuthOidcCallbackMockHandler = (
   overrideResponse?:
     | AuthSession
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, OidcCallbackRequest>>[0]
       ) => Promise<AuthSession> | AuthSession),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, OidcCallbackRequest>(
     '*/auth/oidc/callback',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, OidcCallbackRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -177,14 +186,12 @@ export const getPostAuthOidcCallbackMockHandler = (
 export const getPostAuthRefreshMockHandler = (
   overrideResponse?:
     | AuthSession
-    | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<AuthSession> | AuthSession),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AuthSession> | AuthSession),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/auth/refresh',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -199,13 +206,12 @@ export const getPostAuthRefreshMockHandler = (
 };
 
 export const getPostAuthLogoutMockHandler = (
-  overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  overrideResponse?: void | ((info: Parameters<HttpResponseResolver>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/auth/logout',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -220,13 +226,13 @@ export const getPostAuthElevateMockHandler = (
   overrideResponse?:
     | ElevationToken
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ElevationRequest>>[0]
       ) => Promise<ElevationToken> | ElevationToken),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ElevationRequest>(
     '*/auth/elevate',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ElevationRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -244,13 +250,13 @@ export const getGetAuthElevateMethodsMockHandler = (
   overrideResponse?:
     | GetAuthElevateMethods200
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<GetAuthElevateMethods200> | GetAuthElevateMethods200),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/auth/elevate/methods',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -268,13 +274,15 @@ export const getPostAuthElevateWebauthnBeginMockHandler = (
   overrideResponse?:
     | WebAuthnOptions
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateWebauthnBeginBody>>[0]
       ) => Promise<WebAuthnOptions> | WebAuthnOptions),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostAuthElevateWebauthnBeginBody>(
     '*/auth/elevate/webauthn/begin',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateWebauthnBeginBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -292,13 +300,13 @@ export const getPostAuthElevateOidcBeginMockHandler = (
   overrideResponse?:
     | PostAuthElevateOidcBegin200
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateOidcBeginBody>>[0]
       ) => Promise<PostAuthElevateOidcBegin200> | PostAuthElevateOidcBegin200),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostAuthElevateOidcBeginBody>(
     '*/auth/elevate/oidc/begin',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateOidcBeginBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -316,13 +324,15 @@ export const getPostAuthElevateOidcCompleteMockHandler = (
   overrideResponse?:
     | ElevationToken
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateOidcCompleteBody>>[0]
       ) => Promise<ElevationToken> | ElevationToken),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostAuthElevateOidcCompleteBody>(
     '*/auth/elevate/oidc/complete',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<PathParams, PostAuthElevateOidcCompleteBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -338,13 +348,12 @@ export const getPostAuthElevateOidcCompleteMockHandler = (
 
 export const getGetAuthApiKeysMockHandler = (
   overrideResponse?:
-    | ApiKey[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<ApiKey[]> | ApiKey[]),
+    ApiKey[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<ApiKey[]> | ApiKey[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/auth/api-keys',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -362,13 +371,13 @@ export const getPostAuthApiKeysMockHandler = (
   overrideResponse?:
     | ApiKeyCreated
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ApiKeyCreate>>[0]
       ) => Promise<ApiKeyCreated> | ApiKeyCreated),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ApiKeyCreate>(
     '*/auth/api-keys',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ApiKeyCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -384,12 +393,12 @@ export const getPostAuthApiKeysMockHandler = (
 
 export const getDeleteAuthApiKeysIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ id: string }>(
     '*/auth/api-keys/:id',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
