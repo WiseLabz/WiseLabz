@@ -98,6 +98,7 @@ export type GetDashboardOverviewQueryResult = NonNullable<
 >;
 export type GetDashboardOverviewQueryError = ErrorType<unknown>;
 
+/** @summary Aggregate overview (status counts, recent changes, alert summary) */
 export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
@@ -119,6 +120,7 @@ export function useGetDashboardOverview<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Aggregate overview (status counts, recent changes, alert summary) */
 export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
@@ -140,6 +142,7 @@ export function useGetDashboardOverview<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Aggregate overview (status counts, recent changes, alert summary) */
 export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
@@ -153,10 +156,7 @@ export function useGetDashboardOverview<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Aggregate overview (status counts, recent changes, alert summary)
- */
-
+/** @summary Aggregate overview (status counts, recent changes, alert summary) */
 export function useGetDashboardOverview<
   TData = Awaited<ReturnType<typeof getDashboardOverview>>,
   TError = ErrorType<unknown>,
@@ -222,6 +222,7 @@ export type GetDashboardLayoutQueryResult = NonNullable<
 >;
 export type GetDashboardLayoutQueryError = ErrorType<unknown>;
 
+/** @summary Current user's saved widget layout */
 export function useGetDashboardLayout<
   TData = Awaited<ReturnType<typeof getDashboardLayout>>,
   TError = ErrorType<unknown>,
@@ -240,6 +241,7 @@ export function useGetDashboardLayout<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current user's saved widget layout */
 export function useGetDashboardLayout<
   TData = Awaited<ReturnType<typeof getDashboardLayout>>,
   TError = ErrorType<unknown>,
@@ -260,6 +262,7 @@ export function useGetDashboardLayout<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current user's saved widget layout */
 export function useGetDashboardLayout<
   TData = Awaited<ReturnType<typeof getDashboardLayout>>,
   TError = ErrorType<unknown>,
@@ -270,10 +273,7 @@ export function useGetDashboardLayout<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Current user's saved widget layout
- */
-
+/** @summary Current user's saved widget layout */
 export function useGetDashboardLayout<
   TData = Awaited<ReturnType<typeof getDashboardLayout>>,
   TError = ErrorType<unknown>,
@@ -358,9 +358,7 @@ export type PutDashboardLayoutMutationBody = BodyType<DashboardLayout>;
 export type PutDashboardLayoutMutationError = ErrorType<unknown>;
 export type PutDashboardLayoutMutationVariables = { data: BodyType<DashboardLayout> };
 
-/**
- * @summary Persist current user's widget layout (per-user, §8.5)
- */
+/** @summary Persist current user's widget layout (per-user, §8.5) */
 export const usePutDashboardLayout = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -427,6 +425,10 @@ export type GetDashboardLayoutAdminDefaultQueryResult = NonNullable<
 >;
 export type GetDashboardLayoutAdminDefaultQueryError = ErrorType<ForbiddenResponse>;
 
+/**
+ * Retrieve the system-wide default dashboard layout configured by operators.
+ * @summary Admin-default dashboard layout (operator)
+ */
 export function useGetDashboardLayoutAdminDefault<
   TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -447,6 +449,10 @@ export function useGetDashboardLayoutAdminDefault<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Retrieve the system-wide default dashboard layout configured by operators.
+ * @summary Admin-default dashboard layout (operator)
+ */
 export function useGetDashboardLayoutAdminDefault<
   TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -467,6 +473,10 @@ export function useGetDashboardLayoutAdminDefault<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Retrieve the system-wide default dashboard layout configured by operators.
+ * @summary Admin-default dashboard layout (operator)
+ */
 export function useGetDashboardLayoutAdminDefault<
   TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -480,9 +490,9 @@ export function useGetDashboardLayoutAdminDefault<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Retrieve the system-wide default dashboard layout configured by operators.
  * @summary Admin-default dashboard layout (operator)
  */
-
 export function useGetDashboardLayoutAdminDefault<
   TData = Awaited<ReturnType<typeof getDashboardLayoutAdminDefault>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -572,6 +582,7 @@ export type PutDashboardLayoutAdminDefaultMutationError = ErrorType<ForbiddenRes
 export type PutDashboardLayoutAdminDefaultMutationVariables = { data: BodyType<DashboardLayout> };
 
 /**
+ * Update the system-wide default layout that new users or reset users inherit.
  * @summary Update admin-default dashboard layout (operator)
  */
 export const usePutDashboardLayoutAdminDefault = <
@@ -653,6 +664,7 @@ export type PostDashboardLayoutResetMutationResult = NonNullable<
 export type PostDashboardLayoutResetMutationError = ErrorType<unknown>;
 
 /**
+ * Overwrite the current user's layout with the system-wide admin default.
  * @summary Reset to admin-default dashboard layout
  */
 export const usePostDashboardLayoutReset = <TError = ErrorType<unknown>, TContext = unknown>(

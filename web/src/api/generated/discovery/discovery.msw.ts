@@ -7,9 +7,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { DiscoveryScanResponse, DiscoverySuggestions } from '../../model';
+import type {
+  DiscoveryScanRequest,
+  DiscoveryScanResponse,
+  DiscoverySuggestions,
+} from '../../model';
 
 import {
   getCancelDiscoveryScanResponseMock,
@@ -29,13 +33,13 @@ export const getGetDiscoverySuggestionsMockHandler = (
   overrideResponse?:
     | DiscoverySuggestions
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DiscoverySuggestions> | DiscoverySuggestions),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/discovery/suggestions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -53,13 +57,13 @@ export const getGetDiscoveryScanMockHandler = (
   overrideResponse?:
     | DiscoveryScanResponse
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DiscoveryScanResponse> | DiscoveryScanResponse),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/discovery/scan',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -77,13 +81,13 @@ export const getStartDiscoveryScanMockHandler = (
   overrideResponse?:
     | DiscoveryScanResponse
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, DiscoveryScanRequest>>[0]
       ) => Promise<DiscoveryScanResponse> | DiscoveryScanResponse),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, DiscoveryScanRequest>(
     '*/discovery/scan',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, DiscoveryScanRequest>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -101,13 +105,13 @@ export const getCancelDiscoveryScanMockHandler = (
   overrideResponse?:
     | DiscoveryScanResponse
     | ((
-        info: Parameters<Parameters<typeof http.delete>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DiscoveryScanResponse> | DiscoveryScanResponse),
   options?: RequestHandlerOptions
 ) => {
   return http.delete(
     '*/discovery/scan',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

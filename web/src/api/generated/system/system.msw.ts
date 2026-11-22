@@ -7,11 +7,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   AuditPage,
   AuditRecord,
+  BackupBundle,
   BackupImportResult,
   BackupRun,
   BackupRunPage,
@@ -68,13 +69,12 @@ export {
 
 export const getGetSystemInfoMockHandler = (
   overrideResponse?:
-    | SystemInfo
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<SystemInfo> | SystemInfo),
+    SystemInfo | ((info: Parameters<HttpResponseResolver>[0]) => Promise<SystemInfo> | SystemInfo),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/info',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -90,13 +90,12 @@ export const getGetSystemInfoMockHandler = (
 
 export const getGetSystemAuditMockHandler = (
   overrideResponse?:
-    | AuditPage
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<AuditPage> | AuditPage),
+    AuditPage | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AuditPage> | AuditPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/audit',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -115,13 +114,13 @@ export const getGetSystemAuditExportMockHandler = (
     | AuditRecord[]
     | string
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<AuditRecord[] | string> | AuditRecord[] | string),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/audit/export',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       const resolvedBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -140,13 +139,13 @@ export const getGetSystemSettingsRetentionMockHandler = (
   overrideResponse?:
     | RetentionSettings
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<RetentionSettings> | RetentionSettings),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/settings/retention',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -164,13 +163,13 @@ export const getPutSystemSettingsRetentionMockHandler = (
   overrideResponse?:
     | RetentionSettings
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, RetentionSettings>>[0]
       ) => Promise<RetentionSettings> | RetentionSettings),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, RetentionSettings>(
     '*/system/settings/retention',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, RetentionSettings>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -185,21 +184,22 @@ export const getPutSystemSettingsRetentionMockHandler = (
 };
 
 export const getGetSystemBackupExportMockHandler = (
-  overrideResponse?:
-    Blob | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Blob> | Blob),
+  overrideResponse?: Blob | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Blob> | Blob),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/backup/export',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
-      return HttpResponse.json(
+    async (info: Parameters<HttpResponseResolver>[0]) => {
+      const binaryBody =
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
             ? await overrideResponse(info)
             : overrideResponse
-          : getGetSystemBackupExportResponseMock(),
-        { status: 200 }
-      );
+          : getGetSystemBackupExportResponseMock();
+      return new HttpResponse(binaryBody, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      });
     },
     options
   );
@@ -209,13 +209,13 @@ export const getPostSystemBackupImportMockHandler = (
   overrideResponse?:
     | BackupImportResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, Blob | BackupBundle>>[0]
       ) => Promise<BackupImportResult> | BackupImportResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, Blob | BackupBundle>(
     '*/system/backup/import',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, Blob | BackupBundle>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -232,14 +232,12 @@ export const getPostSystemBackupImportMockHandler = (
 export const getGetSystemBackupScheduleMockHandler = (
   overrideResponse?:
     | BackupSchedule
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<BackupSchedule> | BackupSchedule),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<BackupSchedule> | BackupSchedule),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/backup/schedule',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -257,13 +255,13 @@ export const getPutSystemBackupScheduleMockHandler = (
   overrideResponse?:
     | BackupSchedule
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, BackupSchedule>>[0]
       ) => Promise<BackupSchedule> | BackupSchedule),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, BackupSchedule>(
     '*/system/backup/schedule',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, BackupSchedule>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -280,14 +278,12 @@ export const getPutSystemBackupScheduleMockHandler = (
 export const getGetSystemBackupRunsMockHandler = (
   overrideResponse?:
     | BackupRunPage
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<BackupRunPage> | BackupRunPage),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<BackupRunPage> | BackupRunPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/backup/runs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -303,13 +299,12 @@ export const getGetSystemBackupRunsMockHandler = (
 
 export const getPostSystemBackupRunMockHandler = (
   overrideResponse?:
-    | BackupRun
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<BackupRun> | BackupRun),
+    BackupRun | ((info: Parameters<HttpResponseResolver>[0]) => Promise<BackupRun> | BackupRun),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/system/backup/run',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -327,13 +322,13 @@ export const getGetSystemDiagnosticsMockHandler = (
   overrideResponse?:
     | DiagnosticsBundle
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DiagnosticsBundle> | DiagnosticsBundle),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/diagnostics',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -349,13 +344,12 @@ export const getGetSystemDiagnosticsMockHandler = (
 
 export const getGetSystemJobsMockHandler = (
   overrideResponse?:
-    | JobInfo[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<JobInfo[]> | JobInfo[]),
+    JobInfo[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<JobInfo[]> | JobInfo[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/system/jobs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -371,12 +365,12 @@ export const getGetSystemJobsMockHandler = (
 
 export const getGetHealthMockHandler = (
   overrideResponse?:
-    Health | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Health> | Health),
+    Health | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Health> | Health),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/health',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -392,13 +386,12 @@ export const getGetHealthMockHandler = (
 
 export const getGetHealthzMockHandler = (
   overrideResponse?:
-    | Liveness
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Liveness> | Liveness),
+    Liveness | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Liveness> | Liveness),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/healthz',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -414,13 +407,12 @@ export const getGetHealthzMockHandler = (
 
 export const getGetReadyzMockHandler = (
   overrideResponse?:
-    | Readiness
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Readiness> | Readiness),
+    Readiness | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Readiness> | Readiness),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/readyz',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -437,14 +429,12 @@ export const getGetReadyzMockHandler = (
 export const getPostWsTicketMockHandler = (
   overrideResponse?:
     | PostWsTicket200
-    | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<PostWsTicket200> | PostWsTicket200),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<PostWsTicket200> | PostWsTicket200),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/ws/ticket',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

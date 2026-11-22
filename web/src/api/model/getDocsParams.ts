@@ -11,9 +11,7 @@ import type { PageSizeParameter } from './pageSizeParameter';
 
 export type GetDocsParams = {
   search?: string;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

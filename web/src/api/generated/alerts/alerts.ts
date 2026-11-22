@@ -97,6 +97,7 @@ export const getGetAlertsQueryOptions = <
 export type GetAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof getAlerts>>>;
 export type GetAlertsQueryError = ErrorType<unknown>;
 
+/** @summary Alert center list */
 export function useGetAlerts<
   TData = Awaited<ReturnType<typeof getAlerts>>,
   TError = ErrorType<unknown>,
@@ -116,6 +117,7 @@ export function useGetAlerts<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Alert center list */
 export function useGetAlerts<
   TData = Awaited<ReturnType<typeof getAlerts>>,
   TError = ErrorType<unknown>,
@@ -135,6 +137,7 @@ export function useGetAlerts<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Alert center list */
 export function useGetAlerts<
   TData = Awaited<ReturnType<typeof getAlerts>>,
   TError = ErrorType<unknown>,
@@ -146,10 +149,7 @@ export function useGetAlerts<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Alert center list
- */
-
+/** @summary Alert center list */
 export function useGetAlerts<
   TData = Awaited<ReturnType<typeof getAlerts>>,
   TError = ErrorType<unknown>,
@@ -215,6 +215,7 @@ export const getGetAlertsAlertIdQueryOptions = <
 export type GetAlertsAlertIdQueryResult = NonNullable<Awaited<ReturnType<typeof getAlertsAlertId>>>;
 export type GetAlertsAlertIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary One alert */
 export function useGetAlertsAlertId<
   TData = Awaited<ReturnType<typeof getAlertsAlertId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -234,6 +235,7 @@ export function useGetAlertsAlertId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One alert */
 export function useGetAlertsAlertId<
   TData = Awaited<ReturnType<typeof getAlertsAlertId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -253,6 +255,7 @@ export function useGetAlertsAlertId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary One alert */
 export function useGetAlertsAlertId<
   TData = Awaited<ReturnType<typeof getAlertsAlertId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -264,10 +267,7 @@ export function useGetAlertsAlertId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary One alert
- */
-
+/** @summary One alert */
 export function useGetAlertsAlertId<
   TData = Awaited<ReturnType<typeof getAlertsAlertId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -347,9 +347,7 @@ export type PostAlertsAlertIdResolveMutationResult = NonNullable<
 export type PostAlertsAlertIdResolveMutationError = ErrorType<unknown>;
 export type PostAlertsAlertIdResolveMutationVariables = { alertId: string };
 
-/**
- * @summary Resolve an alert
- */
+/** @summary Resolve an alert */
 export const usePostAlertsAlertIdResolve = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -428,9 +426,7 @@ export type PostAlertsAlertIdDismissMutationResult = NonNullable<
 export type PostAlertsAlertIdDismissMutationError = ErrorType<unknown>;
 export type PostAlertsAlertIdDismissMutationVariables = { alertId: string };
 
-/**
- * @summary Dismiss an alert
- */
+/** @summary Dismiss an alert */
 export const usePostAlertsAlertIdDismiss = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -519,9 +515,7 @@ export type PostAlertsAlertIdSnoozeMutationVariables = {
   data: BodyType<PostAlertsAlertIdSnoozeBody>;
 };
 
-/**
- * @summary Snooze an alert
- */
+/** @summary Snooze an alert */
 export const usePostAlertsAlertIdSnooze = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -605,6 +599,7 @@ export type PostAlertsAlertIdDraftRunbookMutationError = ErrorType<
 export type PostAlertsAlertIdDraftRunbookMutationVariables = { alertId: string };
 
 /**
+ * Builds a starting-point runbook from the alert, its linked change and any runbook already bound to the target. No AI is involved, so this works with the AI module disabled.
  * @summary Draft a runbook from an alert (operator; deterministic template, nothing is persisted)
  */
 export const usePostAlertsAlertIdDraftRunbook = <
@@ -694,9 +689,7 @@ export type PostAlertsBulkSnoozeMutationBody = BodyType<AlertBulkSnoozeRequest>;
 export type PostAlertsBulkSnoozeMutationError = ErrorType<BadRequestResponse>;
 export type PostAlertsBulkSnoozeMutationVariables = { data: BodyType<AlertBulkSnoozeRequest> };
 
-/**
- * @summary Snooze multiple alerts
- */
+/** @summary Snooze multiple alerts */
 export const usePostAlertsBulkSnooze = <TError = ErrorType<BadRequestResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<

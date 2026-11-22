@@ -7,16 +7,19 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   RestartPreview,
+  ResumeRunbookRunBody,
   Runbook,
+  RunbookCreate,
   RunbookPage,
   RunbookRun,
   RunbookRunPage,
   RunbookRunPreview,
   RunbookRunRecord,
+  RunbookUpdate,
 } from '../../model';
 
 import {
@@ -46,12 +49,12 @@ export {
 export const getGetRunbooksMockHandler = (
   overrideResponse?:
     | RunbookPage
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<RunbookPage> | RunbookPage),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<RunbookPage> | RunbookPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/runbooks',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -68,12 +71,14 @@ export const getGetRunbooksMockHandler = (
 export const getPostRunbooksMockHandler = (
   overrideResponse?:
     | Runbook
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<Runbook> | Runbook),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, RunbookCreate>>[0]
+      ) => Promise<Runbook> | Runbook),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, RunbookCreate>(
     '*/runbooks',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, RunbookCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -89,12 +94,15 @@ export const getPostRunbooksMockHandler = (
 
 export const getGetRunbooksRunbookIdMockHandler = (
   overrideResponse?:
-    Runbook | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Runbook> | Runbook),
+    | Runbook
+    | ((
+        info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]
+      ) => Promise<Runbook> | Runbook),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ runbookId: string }>(
     '*/runbooks/:runbookId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -110,12 +118,15 @@ export const getGetRunbooksRunbookIdMockHandler = (
 
 export const getPutRunbooksRunbookIdMockHandler = (
   overrideResponse?:
-    Runbook | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<Runbook> | Runbook),
+    | Runbook
+    | ((
+        info: Parameters<HttpResponseResolver<{ runbookId: string }, RunbookUpdate>>[0]
+      ) => Promise<Runbook> | Runbook),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ runbookId: string }, RunbookUpdate>(
     '*/runbooks/:runbookId',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string }, RunbookUpdate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -131,12 +142,13 @@ export const getPutRunbooksRunbookIdMockHandler = (
 
 export const getDeleteRunbooksRunbookIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ runbookId: string }>(
     '*/runbooks/:runbookId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -151,13 +163,13 @@ export const getExecuteRunbookStepMockHandler = (
   overrideResponse?:
     | RestartPreview
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ runbookId: string; stepId: string }>>[0]
       ) => Promise<RestartPreview> | RestartPreview),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runbookId: string; stepId: string }>(
     '*/runbooks/:runbookId/steps/:stepId/execute',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string; stepId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -176,13 +188,13 @@ export const getStartRunbookRunMockHandler = (
     | RunbookRunPreview
     | RunbookRun
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]
       ) => Promise<RunbookRunPreview | RunbookRun> | RunbookRunPreview | RunbookRun),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runbookId: string }>(
     '*/runbooks/:runbookId/run',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -200,13 +212,13 @@ export const getListRunbookRunsMockHandler = (
   overrideResponse?:
     | RunbookRunPage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]
       ) => Promise<RunbookRunPage> | RunbookRunPage),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ runbookId: string }>(
     '*/runbooks/:runbookId/runs',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runbookId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -223,12 +235,14 @@ export const getListRunbookRunsMockHandler = (
 export const getGetRunbookRunMockHandler = (
   overrideResponse?:
     | RunbookRun
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<RunbookRun> | RunbookRun),
+    | ((
+        info: Parameters<HttpResponseResolver<{ runId: string }>>[0]
+      ) => Promise<RunbookRun> | RunbookRun),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ runId: string }>(
     '*/runbook-runs/:runId',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -244,12 +258,12 @@ export const getGetRunbookRunMockHandler = (
 
 export const getApproveRunbookRunMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runId: string }>(
     '*/runbook-runs/:runId/approve',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -262,12 +276,12 @@ export const getApproveRunbookRunMockHandler = (
 
 export const getRejectRunbookRunMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runId: string }>(
     '*/runbook-runs/:runId/reject',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -280,12 +294,15 @@ export const getRejectRunbookRunMockHandler = (
 
 export const getConfirmRunbookRunStepMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<{ runId: string; stepId: string }>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runId: string; stepId: string }>(
     '*/runbook-runs/:runId/steps/:stepId/confirm',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string; stepId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -300,13 +317,13 @@ export const getResumeRunbookRunMockHandler = (
   overrideResponse?:
     | RunbookRunRecord
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ runId: string }, ResumeRunbookRunBody>>[0]
       ) => Promise<RunbookRunRecord> | RunbookRunRecord),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runId: string }, ResumeRunbookRunBody>(
     '*/runbook-runs/:runId/resume',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string }, ResumeRunbookRunBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -322,12 +339,12 @@ export const getResumeRunbookRunMockHandler = (
 
 export const getCancelRunbookRunMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    void | ((info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ runId: string }>(
     '*/runbook-runs/:runId/cancel',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ runId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

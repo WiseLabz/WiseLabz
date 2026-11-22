@@ -7,7 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, RequestHandlerOptions } from 'msw';
 
 import type { Notification, NotificationDeliveryPage, NotificationPage } from '../../model';
 
@@ -26,14 +26,12 @@ export {
 export const getGetNotificationsMockHandler = (
   overrideResponse?:
     | NotificationPage
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<NotificationPage> | NotificationPage),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<NotificationPage> | NotificationPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/notifications',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -48,13 +46,12 @@ export const getGetNotificationsMockHandler = (
 };
 
 export const getPostNotificationsReadAllMockHandler = (
-  overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+  overrideResponse?: void | ((info: Parameters<HttpResponseResolver>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/notifications/read-all',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -69,13 +66,13 @@ export const getPostNotificationsNotificationIdReadMockHandler = (
   overrideResponse?:
     | Notification
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ notificationId: string }>>[0]
       ) => Promise<Notification> | Notification),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ notificationId: string }>(
     '*/notifications/:notificationId/read',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ notificationId: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -93,13 +90,13 @@ export const getGetNotificationsDeliveriesMockHandler = (
   overrideResponse?:
     | NotificationDeliveryPage
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<NotificationDeliveryPage> | NotificationDeliveryPage),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/notifications/deliveries',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

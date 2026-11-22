@@ -87,6 +87,10 @@ export const getGetAttentionQueryOptions = <
 export type GetAttentionQueryResult = NonNullable<Awaited<ReturnType<typeof getAttention>>>;
 export type GetAttentionQueryError = ErrorType<unknown>;
 
+/**
+ * Aggregates open alerts and findings, sorted by severity then age. Each item can be resolved via the alert or finding resolution endpoints.
+ * @summary Recovery book attention queue — merged alerts and findings
+ */
 export function useGetAttention<
   TData = Awaited<ReturnType<typeof getAttention>>,
   TError = ErrorType<unknown>,
@@ -106,6 +110,10 @@ export function useGetAttention<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Aggregates open alerts and findings, sorted by severity then age. Each item can be resolved via the alert or finding resolution endpoints.
+ * @summary Recovery book attention queue — merged alerts and findings
+ */
 export function useGetAttention<
   TData = Awaited<ReturnType<typeof getAttention>>,
   TError = ErrorType<unknown>,
@@ -125,6 +133,10 @@ export function useGetAttention<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Aggregates open alerts and findings, sorted by severity then age. Each item can be resolved via the alert or finding resolution endpoints.
+ * @summary Recovery book attention queue — merged alerts and findings
+ */
 export function useGetAttention<
   TData = Awaited<ReturnType<typeof getAttention>>,
   TError = ErrorType<unknown>,
@@ -137,9 +149,9 @@ export function useGetAttention<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Aggregates open alerts and findings, sorted by severity then age. Each item can be resolved via the alert or finding resolution endpoints.
  * @summary Recovery book attention queue — merged alerts and findings
  */
-
 export function useGetAttention<
   TData = Awaited<ReturnType<typeof getAttention>>,
   TError = ErrorType<unknown>,

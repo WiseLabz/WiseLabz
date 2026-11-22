@@ -11,9 +11,7 @@ export type PostTimelineNarrateParams = {
   connectorId?: string;
   after?: string;
   before?: string;
-  /**
-   * Comma-separated change, sync, alert, doc, journal or audit
-   */
+  /** Comma-separated change, sync, alert, doc, journal or audit */
   kinds?: string;
   allSyncRuns?: boolean;
 };

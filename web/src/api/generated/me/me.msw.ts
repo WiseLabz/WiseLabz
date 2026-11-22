@@ -7,16 +7,22 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   MfaStatus,
+  PasswordChange,
   PostMeMfaRecoveryCodes200,
+  PostMeMfaTotpBody,
+  PostMeMfaTotpFactorIdConfirmBody,
+  PostMeMfaWebauthnRegisterBeginBody,
+  ProfileUpdate,
   Session,
   TotpConfirmResult,
   TotpEnrollment,
   User,
   WebAuthnOptions,
+  WebAuthnResponse,
 } from '../../model';
 
 import {
@@ -44,13 +50,12 @@ export {
 } from './me.faker';
 
 export const getGetMeMockHandler = (
-  overrideResponse?:
-    User | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<User> | User),
+  overrideResponse?: User | ((info: Parameters<HttpResponseResolver>[0]) => Promise<User> | User),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/me',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -66,12 +71,15 @@ export const getGetMeMockHandler = (
 
 export const getPatchMeMockHandler = (
   overrideResponse?:
-    User | ((info: Parameters<Parameters<typeof http.patch>[1]>[0]) => Promise<User> | User),
+    | User
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, ProfileUpdate>>[0]
+      ) => Promise<User> | User),
   options?: RequestHandlerOptions
 ) => {
-  return http.patch(
+  return http.patch<PathParams, ProfileUpdate>(
     '*/me',
-    async (info: Parameters<Parameters<typeof http.patch>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ProfileUpdate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -87,12 +95,15 @@ export const getPatchMeMockHandler = (
 
 export const getPostMePasswordMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, PasswordChange>>[0]
+      ) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PasswordChange>(
     '*/me/password',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PasswordChange>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -105,13 +116,12 @@ export const getPostMePasswordMockHandler = (
 
 export const getGetMeSessionsMockHandler = (
   overrideResponse?:
-    | Session[]
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<Session[]> | Session[]),
+    Session[] | ((info: Parameters<HttpResponseResolver>[0]) => Promise<Session[]> | Session[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/me/sessions',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -127,12 +137,13 @@ export const getGetMeSessionsMockHandler = (
 
 export const getDeleteMeSessionsSessionIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ sessionId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ sessionId: string }>(
     '*/me/sessions/:sessionId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ sessionId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }
@@ -145,13 +156,12 @@ export const getDeleteMeSessionsSessionIdMockHandler = (
 
 export const getGetMeMfaMockHandler = (
   overrideResponse?:
-    | MfaStatus
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<MfaStatus> | MfaStatus),
+    MfaStatus | ((info: Parameters<HttpResponseResolver>[0]) => Promise<MfaStatus> | MfaStatus),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/me/mfa',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -169,13 +179,13 @@ export const getPostMeMfaTotpMockHandler = (
   overrideResponse?:
     | TotpEnrollment
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostMeMfaTotpBody>>[0]
       ) => Promise<TotpEnrollment> | TotpEnrollment),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostMeMfaTotpBody>(
     '*/me/mfa/totp',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, PostMeMfaTotpBody>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -193,13 +203,19 @@ export const getPostMeMfaTotpFactorIdConfirmMockHandler = (
   overrideResponse?:
     | TotpConfirmResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ factorId: string }, PostMeMfaTotpFactorIdConfirmBody>
+        >[0]
       ) => Promise<TotpConfirmResult> | TotpConfirmResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ factorId: string }, PostMeMfaTotpFactorIdConfirmBody>(
     '*/me/mfa/totp/:factorId/confirm',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ factorId: string }, PostMeMfaTotpFactorIdConfirmBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -217,13 +233,15 @@ export const getPostMeMfaWebauthnRegisterBeginMockHandler = (
   overrideResponse?:
     | WebAuthnOptions
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, PostMeMfaWebauthnRegisterBeginBody>>[0]
       ) => Promise<WebAuthnOptions> | WebAuthnOptions),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostMeMfaWebauthnRegisterBeginBody>(
     '*/me/mfa/webauthn/register/begin',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<PathParams, PostMeMfaWebauthnRegisterBeginBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -241,13 +259,13 @@ export const getPostMeMfaWebauthnRegisterFinishMockHandler = (
   overrideResponse?:
     | TotpConfirmResult
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, WebAuthnResponse>>[0]
       ) => Promise<TotpConfirmResult> | TotpConfirmResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, WebAuthnResponse>(
     '*/me/mfa/webauthn/register/finish',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, WebAuthnResponse>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -265,13 +283,13 @@ export const getPostMeMfaRecoveryCodesMockHandler = (
   overrideResponse?:
     | PostMeMfaRecoveryCodes200
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<PostMeMfaRecoveryCodes200> | PostMeMfaRecoveryCodes200),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/me/mfa/recovery-codes',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -287,12 +305,13 @@ export const getPostMeMfaRecoveryCodesMockHandler = (
 
 export const getDeleteMeMfaFactorsFactorIdMockHandler = (
   overrideResponse?:
-    void | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+    | void
+    | ((info: Parameters<HttpResponseResolver<{ factorId: string }>>[0]) => Promise<void> | void),
   options?: RequestHandlerOptions
 ) => {
-  return http.delete(
+  return http.delete<{ factorId: string }>(
     '*/me/mfa/factors/:factorId',
-    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ factorId: string }>>[0]) => {
       if (typeof overrideResponse === 'function') {
         await overrideResponse(info);
       }

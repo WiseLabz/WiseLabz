@@ -8,8 +8,6 @@
  */
 
 export type ExecuteRunbookStepParams = {
-  /**
-   * true previews the operation without performing it; absent/false performs the real, elevation-gated operation.
-   */
+  /** true previews the operation without performing it; absent/false performs the real, elevation-gated operation. */
   dryRun?: boolean;
 };

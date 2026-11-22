@@ -15,9 +15,7 @@ export type GetFindingsParams = {
   connectorId?: string;
   checkType?: QualityCheckType;
   status?: QualityFindingStatus;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1

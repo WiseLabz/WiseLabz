@@ -94,6 +94,7 @@ export const getGetTimelineQueryOptions = <
 export type GetTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getTimeline>>>;
 export type GetTimelineQueryError = ErrorType<void>;
 
+/** @summary Merged lab journal (always cursor paginated) */
 export function useGetTimeline<
   TData = Awaited<ReturnType<typeof getTimeline>>,
   TError = ErrorType<void>,
@@ -113,6 +114,7 @@ export function useGetTimeline<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Merged lab journal (always cursor paginated) */
 export function useGetTimeline<
   TData = Awaited<ReturnType<typeof getTimeline>>,
   TError = ErrorType<void>,
@@ -132,6 +134,7 @@ export function useGetTimeline<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Merged lab journal (always cursor paginated) */
 export function useGetTimeline<
   TData = Awaited<ReturnType<typeof getTimeline>>,
   TError = ErrorType<void>,
@@ -143,10 +146,7 @@ export function useGetTimeline<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Merged lab journal (always cursor paginated)
- */
-
+/** @summary Merged lab journal (always cursor paginated) */
 export function useGetTimeline<
   TData = Awaited<ReturnType<typeof getTimeline>>,
   TError = ErrorType<void>,
@@ -228,6 +228,7 @@ export type PostTimelineNarrateMutationError = ErrorType<Error>;
 export type PostTimelineNarrateMutationVariables = { params?: PostTimelineNarrateParams };
 
 /**
+ * Takes the same query parameters as GET /timeline (no body, no paging) and asks the configured AI provider for a plain-text narration of the events the caller can see in that window: at most 100 events (the newest) and 48 KB of prompt, the oldest dropped first. Events are numbered oldest first and the narration cites them as [n]. Nothing is cached or persisted. An empty window returns an empty narration without calling the provider.
  * @summary Narrate the visible events of a journal window with AI
  */
 export const usePostTimelineNarrate = <TError = ErrorType<Error>, TContext = unknown>(
@@ -312,9 +313,7 @@ export type PostJournalMutationBody = BodyType<JournalEntryInput>;
 export type PostJournalMutationError = ErrorType<void>;
 export type PostJournalMutationVariables = { data: BodyType<JournalEntryInput> };
 
-/**
- * @summary Create a manual entry (connector operator or lab-wide instance admin)
- */
+/** @summary Create a manual entry (connector operator or lab-wide instance admin) */
 export const usePostJournal = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -398,9 +397,7 @@ export type PutJournalIdMutationBody = BodyType<JournalEntryInput>;
 export type PutJournalIdMutationError = ErrorType<void>;
 export type PutJournalIdMutationVariables = { id: string; data: BodyType<JournalEntryInput> };
 
-/**
- * @summary Replace an entry (author or admin with read access)
- */
+/** @summary Replace an entry (author or admin with read access) */
 export const usePutJournalId = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -476,9 +473,7 @@ export type DeleteJournalIdMutationResult = NonNullable<
 export type DeleteJournalIdMutationError = ErrorType<void>;
 export type DeleteJournalIdMutationVariables = { id: string };
 
-/**
- * @summary Delete an entry (author or admin with read access)
- */
+/** @summary Delete an entry (author or admin with read access) */
 export const useDeleteJournalId = <TError = ErrorType<void>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<

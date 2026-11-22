@@ -7,7 +7,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type { DashboardLayout, DashboardOverview } from '../../model';
 
@@ -33,13 +33,13 @@ export const getGetDashboardOverviewMockHandler = (
   overrideResponse?:
     | DashboardOverview
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<DashboardOverview> | DashboardOverview),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/dashboard/overview',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -56,14 +56,12 @@ export const getGetDashboardOverviewMockHandler = (
 export const getGetDashboardLayoutMockHandler = (
   overrideResponse?:
     | DashboardLayout
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<DashboardLayout> | DashboardLayout),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DashboardLayout> | DashboardLayout),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/dashboard/layout',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -81,13 +79,13 @@ export const getPutDashboardLayoutMockHandler = (
   overrideResponse?:
     | DashboardLayout
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, DashboardLayout>>[0]
       ) => Promise<DashboardLayout> | DashboardLayout),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, DashboardLayout>(
     '*/dashboard/layout',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, DashboardLayout>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -104,14 +102,12 @@ export const getPutDashboardLayoutMockHandler = (
 export const getGetDashboardLayoutAdminDefaultMockHandler = (
   overrideResponse?:
     | DashboardLayout
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
-      ) => Promise<DashboardLayout> | DashboardLayout),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DashboardLayout> | DashboardLayout),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/dashboard/layout/admin-default',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -129,13 +125,13 @@ export const getPutDashboardLayoutAdminDefaultMockHandler = (
   overrideResponse?:
     | DashboardLayout
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, DashboardLayout>>[0]
       ) => Promise<DashboardLayout> | DashboardLayout),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, DashboardLayout>(
     '*/dashboard/layout/admin-default',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, DashboardLayout>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -152,14 +148,12 @@ export const getPutDashboardLayoutAdminDefaultMockHandler = (
 export const getPostDashboardLayoutResetMockHandler = (
   overrideResponse?:
     | DashboardLayout
-    | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
-      ) => Promise<DashboardLayout> | DashboardLayout),
+    | ((info: Parameters<HttpResponseResolver>[0]) => Promise<DashboardLayout> | DashboardLayout),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/dashboard/layout/reset',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

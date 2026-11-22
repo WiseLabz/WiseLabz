@@ -15,17 +15,13 @@ import type { Severity } from './severity';
 export type GetAlertsParams = {
   severity?: Severity;
   status?: AlertStatus;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   page?: PageParameter;
   /**
    * @minimum 1
    * @maximum 100
    */
   pageSize?: PageSizeParameter;
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   days?: DaysQueryParameter;
 };

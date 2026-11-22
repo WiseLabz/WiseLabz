@@ -7,9 +7,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
-import type { ChatConversation, ChatConversationDetail, ChatMessage } from '../../model';
+import type {
+  ChatConversation,
+  ChatConversationCreate,
+  ChatConversationDetail,
+  ChatMessage,
+  ChatMessageCreate,
+} from '../../model';
 
 import {
   getGetChatConversationsIdResponseMock,
@@ -29,13 +35,13 @@ export const getGetChatConversationsMockHandler = (
   overrideResponse?:
     | ChatConversation[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<ChatConversation[]> | ChatConversation[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/chat/conversations',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -53,13 +59,13 @@ export const getPostChatConversationsMockHandler = (
   overrideResponse?:
     | ChatConversation
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, ChatConversationCreate>>[0]
       ) => Promise<ChatConversation> | ChatConversation),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, ChatConversationCreate>(
     '*/chat/conversations',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, ChatConversationCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -77,13 +83,13 @@ export const getGetChatConversationsIdMockHandler = (
   overrideResponse?:
     | ChatConversationDetail
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }>>[0]
       ) => Promise<ChatConversationDetail> | ChatConversationDetail),
   options?: RequestHandlerOptions
 ) => {
-  return http.get(
+  return http.get<{ id: string }>(
     '*/chat/conversations/:id',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -101,13 +107,13 @@ export const getPostChatConversationsIdMessagesMockHandler = (
   overrideResponse?:
     | ChatMessage
     | ((
-        info: Parameters<Parameters<typeof http.post>[1]>[0]
+        info: Parameters<HttpResponseResolver<{ id: string }, ChatMessageCreate>>[0]
       ) => Promise<ChatMessage> | ChatMessage),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<{ id: string }, ChatMessageCreate>(
     '*/chat/conversations/:id/messages',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<{ id: string }, ChatMessageCreate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

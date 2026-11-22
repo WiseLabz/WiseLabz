@@ -7,14 +7,17 @@
  * OpenAPI spec version: 0.1.0
  */
 import { HttpResponse, http } from 'msw';
-import type { RequestHandlerOptions } from 'msw';
+import type { HttpResponseResolver, PathParams, RequestHandlerOptions } from 'msw';
 
 import type {
   AiConfig,
   AiFallbackProvider,
   AuthConfig,
+  AuthSettingsUpdate,
   NotificationConfig,
   OidcProvider,
+  PostNotificationsConfigTestBody,
+  PutAuthProvidersProviderIdEnabledBody,
   TestResult,
 } from '../../model';
 
@@ -48,13 +51,12 @@ export {
 
 export const getGetAuthConfigMockHandler = (
   overrideResponse?:
-    | AuthConfig
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<AuthConfig> | AuthConfig),
+    AuthConfig | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AuthConfig> | AuthConfig),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/auth/config',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -71,12 +73,14 @@ export const getGetAuthConfigMockHandler = (
 export const getPutAuthConfigMockHandler = (
   overrideResponse?:
     | AuthConfig
-    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<AuthConfig> | AuthConfig),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, AuthSettingsUpdate>>[0]
+      ) => Promise<AuthConfig> | AuthConfig),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, AuthSettingsUpdate>(
     '*/auth/config',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, AuthSettingsUpdate>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -94,13 +98,19 @@ export const getPutAuthProvidersProviderIdEnabledMockHandler = (
   overrideResponse?:
     | OidcProvider
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<
+          HttpResponseResolver<{ providerId: string }, PutAuthProvidersProviderIdEnabledBody>
+        >[0]
       ) => Promise<OidcProvider> | OidcProvider),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<{ providerId: string }, PutAuthProvidersProviderIdEnabledBody>(
     '*/auth/providers/:providerId/enabled',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (
+      info: Parameters<
+        HttpResponseResolver<{ providerId: string }, PutAuthProvidersProviderIdEnabledBody>
+      >[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -116,13 +126,12 @@ export const getPutAuthProvidersProviderIdEnabledMockHandler = (
 
 export const getGetAiConfigMockHandler = (
   overrideResponse?:
-    | AiConfig
-    | ((info: Parameters<Parameters<typeof http.get>[1]>[0]) => Promise<AiConfig> | AiConfig),
+    AiConfig | ((info: Parameters<HttpResponseResolver>[0]) => Promise<AiConfig> | AiConfig),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/ai/config',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -139,12 +148,14 @@ export const getGetAiConfigMockHandler = (
 export const getPutAiConfigMockHandler = (
   overrideResponse?:
     | AiConfig
-    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<AiConfig> | AiConfig),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, AiConfig>>[0]
+      ) => Promise<AiConfig> | AiConfig),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, AiConfig>(
     '*/ai/config',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, AiConfig>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -160,13 +171,12 @@ export const getPutAiConfigMockHandler = (
 
 export const getPostAiConfigTestMockHandler = (
   overrideResponse?:
-    | TestResult
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<TestResult> | TestResult),
+    TestResult | ((info: Parameters<HttpResponseResolver>[0]) => Promise<TestResult> | TestResult),
   options?: RequestHandlerOptions
 ) => {
   return http.post(
     '*/ai/config/test',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -184,13 +194,13 @@ export const getGetAiConfigFallbackProvidersMockHandler = (
   overrideResponse?:
     | AiFallbackProvider[]
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<AiFallbackProvider[]> | AiFallbackProvider[]),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/ai/config/fallback-providers',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -208,13 +218,13 @@ export const getPutAiConfigFallbackProvidersMockHandler = (
   overrideResponse?:
     | AiFallbackProvider[]
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, AiFallbackProvider[]>>[0]
       ) => Promise<AiFallbackProvider[]> | AiFallbackProvider[]),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, AiFallbackProvider[]>(
     '*/ai/config/fallback-providers',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, AiFallbackProvider[]>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -232,13 +242,13 @@ export const getGetNotificationsConfigMockHandler = (
   overrideResponse?:
     | NotificationConfig
     | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0]
+        info: Parameters<HttpResponseResolver>[0]
       ) => Promise<NotificationConfig> | NotificationConfig),
   options?: RequestHandlerOptions
 ) => {
   return http.get(
     '*/notifications/config',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -256,13 +266,13 @@ export const getPutNotificationsConfigMockHandler = (
   overrideResponse?:
     | NotificationConfig
     | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0]
+        info: Parameters<HttpResponseResolver<PathParams, NotificationConfig>>[0]
       ) => Promise<NotificationConfig> | NotificationConfig),
   options?: RequestHandlerOptions
 ) => {
-  return http.put(
+  return http.put<PathParams, NotificationConfig>(
     '*/notifications/config',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+    async (info: Parameters<HttpResponseResolver<PathParams, NotificationConfig>>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'
@@ -279,12 +289,16 @@ export const getPutNotificationsConfigMockHandler = (
 export const getPostNotificationsConfigTestMockHandler = (
   overrideResponse?:
     | TestResult
-    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<TestResult> | TestResult),
+    | ((
+        info: Parameters<HttpResponseResolver<PathParams, PostNotificationsConfigTestBody>>[0]
+      ) => Promise<TestResult> | TestResult),
   options?: RequestHandlerOptions
 ) => {
-  return http.post(
+  return http.post<PathParams, PostNotificationsConfigTestBody>(
     '*/notifications/config/test',
-    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+    async (
+      info: Parameters<HttpResponseResolver<PathParams, PostNotificationsConfigTestBody>>[0]
+    ) => {
       return HttpResponse.json(
         overrideResponse !== undefined
           ? typeof overrideResponse === 'function'

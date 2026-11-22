@@ -101,6 +101,10 @@ export type GetDiscoverySuggestionsQueryResult = NonNullable<
 >;
 export type GetDiscoverySuggestionsQueryError = ErrorType<UnauthorizedResponse | ForbiddenResponse>;
 
+/**
+ * The /24 around the caller's private or mesh IPv4 address, then those of the server, then up to three /24s ranked by known-host count, without duplicates. Includes the filtered known-host count; suggestions may be empty.
+ * @summary Ranges the caller may scan (instance admin)
+ */
 export function useGetDiscoverySuggestions<
   TData = Awaited<ReturnType<typeof getDiscoverySuggestions>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
@@ -121,6 +125,10 @@ export function useGetDiscoverySuggestions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * The /24 around the caller's private or mesh IPv4 address, then those of the server, then up to three /24s ranked by known-host count, without duplicates. Includes the filtered known-host count; suggestions may be empty.
+ * @summary Ranges the caller may scan (instance admin)
+ */
 export function useGetDiscoverySuggestions<
   TData = Awaited<ReturnType<typeof getDiscoverySuggestions>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
@@ -141,6 +149,10 @@ export function useGetDiscoverySuggestions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * The /24 around the caller's private or mesh IPv4 address, then those of the server, then up to three /24s ranked by known-host count, without duplicates. Includes the filtered known-host count; suggestions may be empty.
+ * @summary Ranges the caller may scan (instance admin)
+ */
 export function useGetDiscoverySuggestions<
   TData = Awaited<ReturnType<typeof getDiscoverySuggestions>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
@@ -154,9 +166,9 @@ export function useGetDiscoverySuggestions<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * The /24 around the caller's private or mesh IPv4 address, then those of the server, then up to three /24s ranked by known-host count, without duplicates. Includes the filtered known-host count; suggestions may be empty.
  * @summary Ranges the caller may scan (instance admin)
  */
-
 export function useGetDiscoverySuggestions<
   TData = Awaited<ReturnType<typeof getDiscoverySuggestions>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse>,
@@ -222,6 +234,10 @@ export type GetDiscoveryScanQueryError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | NotFoundResponse
 >;
 
+/**
+ * Readable until 15 minutes after the scan ended or until the next scan starts. Results live in memory only and are lost on restart.
+ * @summary The running or most recent network scan (instance admin)
+ */
 export function useGetDiscoveryScan<
   TData = Awaited<ReturnType<typeof getDiscoveryScan>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
@@ -240,6 +256,10 @@ export function useGetDiscoveryScan<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Readable until 15 minutes after the scan ended or until the next scan starts. Results live in memory only and are lost on restart.
+ * @summary The running or most recent network scan (instance admin)
+ */
 export function useGetDiscoveryScan<
   TData = Awaited<ReturnType<typeof getDiscoveryScan>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
@@ -258,6 +278,10 @@ export function useGetDiscoveryScan<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Readable until 15 minutes after the scan ended or until the next scan starts. Results live in memory only and are lost on restart.
+ * @summary The running or most recent network scan (instance admin)
+ */
 export function useGetDiscoveryScan<
   TData = Awaited<ReturnType<typeof getDiscoveryScan>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
@@ -269,9 +293,9 @@ export function useGetDiscoveryScan<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Readable until 15 minutes after the scan ended or until the next scan starts. Results live in memory only and are lost on restart.
  * @summary The running or most recent network scan (instance admin)
  */
-
 export function useGetDiscoveryScan<
   TData = Awaited<ReturnType<typeof getDiscoveryScan>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | NotFoundResponse>,
@@ -360,6 +384,7 @@ export type StartDiscoveryScanMutationError = ErrorType<
 export type StartDiscoveryScanMutationVariables = { data: BodyType<DiscoveryScanRequest> };
 
 /**
+ * Scans up to 16 IPv4 ranges in RFC 1918 or 100.64.0.0/10 space, /22 to /32 (host bits masked), optionally including known hosts and source addresses answering mDNS/SSDP queries. At most 1,024 addresses are admitted, in range, known-host, network-answer order. Ranges may be empty only when includeInventory is true. The deprecated cidr shorthand scans that range alone, without known hosts or network answers; ranges takes precedence. Known IPv6 hosts must be in fd00::/8. At most one scan runs at a time; a start while one runs is refused with 409 `scan_in_progress`. At most six starts are allowed per rolling hour per instance; a start over that limit is refused with 429 `rate_limited`. A refused start does not count towards the limit. The deadline is 60 seconds per 256 initially admitted addresses (rounded up, at least one group), plus 60 seconds when asking the network with fewer than 1,024 initial addresses, capped at 240 seconds. The scan reports `partial` when its deadline cuts it short. Progress and candidates are sent as WebSocket events to the admin who started the scan only (see docs/WS_CONTRACT.md). When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `discovery.scan`.
  * @summary Start a network scan of ranges and known hosts (instance admin)
  */
 export const useStartDiscoveryScan = <
@@ -438,6 +463,7 @@ export type CancelDiscoveryScanMutationError = ErrorType<
 >;
 
 /**
+ * Stops the running scan and returns it as `cancelled`. Candidates found so far are kept. Needs no elevation.
  * @summary Cancel the running network scan (instance admin)
  */
 export const useCancelDiscoveryScan = <

@@ -8,12 +8,8 @@
  */
 
 export type GetSystemBackupRunsParams = {
-  /**
-   * @minimum 1
-   */
+  /** @minimum 1 */
   limit?: number;
-  /**
-   * @minimum 0
-   */
+  /** @minimum 0 */
   offset?: number;
 };

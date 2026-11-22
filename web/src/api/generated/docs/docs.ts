@@ -124,6 +124,7 @@ export const getGetDocsQueryOptions = <
 export type GetDocsQueryResult = NonNullable<Awaited<ReturnType<typeof getDocs>>>;
 export type GetDocsQueryError = ErrorType<unknown>;
 
+/** @summary Flat searchable list of all docs (any authenticated user) */
 export function useGetDocs<
   TData = Awaited<ReturnType<typeof getDocs>>,
   TError = ErrorType<unknown>,
@@ -143,6 +144,7 @@ export function useGetDocs<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Flat searchable list of all docs (any authenticated user) */
 export function useGetDocs<
   TData = Awaited<ReturnType<typeof getDocs>>,
   TError = ErrorType<unknown>,
@@ -162,6 +164,7 @@ export function useGetDocs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Flat searchable list of all docs (any authenticated user) */
 export function useGetDocs<
   TData = Awaited<ReturnType<typeof getDocs>>,
   TError = ErrorType<unknown>,
@@ -173,10 +176,7 @@ export function useGetDocs<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Flat searchable list of all docs (any authenticated user)
- */
-
+/** @summary Flat searchable list of all docs (any authenticated user) */
 export function useGetDocs<
   TData = Awaited<ReturnType<typeof getDocs>>,
   TError = ErrorType<unknown>,
@@ -260,9 +260,7 @@ export type PostDocsMutationBody = BodyType<DocCreate>;
 export type PostDocsMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>;
 export type PostDocsMutationVariables = { data: BodyType<DocCreate> };
 
-/**
- * @summary Create a human doc (lab admin or connector operator)
- */
+/** @summary Create a human doc (lab admin or connector operator) */
 export const usePostDocs = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
   TContext = unknown,
@@ -323,6 +321,7 @@ export const getGetDocsTrashQueryOptions = <
 export type GetDocsTrashQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsTrash>>>;
 export type GetDocsTrashQueryError = ErrorType<ForbiddenResponse>;
 
+/** @summary List deleted docs (instance admin) */
 export function useGetDocsTrash<
   TData = Awaited<ReturnType<typeof getDocsTrash>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -341,6 +340,7 @@ export function useGetDocsTrash<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List deleted docs (instance admin) */
 export function useGetDocsTrash<
   TData = Awaited<ReturnType<typeof getDocsTrash>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -359,6 +359,7 @@ export function useGetDocsTrash<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List deleted docs (instance admin) */
 export function useGetDocsTrash<
   TData = Awaited<ReturnType<typeof getDocsTrash>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -369,10 +370,7 @@ export function useGetDocsTrash<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List deleted docs (instance admin)
- */
-
+/** @summary List deleted docs (instance admin) */
 export function useGetDocsTrash<
   TData = Awaited<ReturnType<typeof getDocsTrash>>,
   TError = ErrorType<ForbiddenResponse>,
@@ -401,7 +399,7 @@ export const getDocsExport = (
   options?: SecondParameter<typeof customInstance>,
   signal?: AbortSignal
 ) => {
-  return customInstance<unknown | Blob>(
+  return customInstance<Blob>(
     { url: `/docs/export`, method: 'GET', params, responseType: 'blob', signal },
     options
   );
@@ -438,6 +436,10 @@ export const getGetDocsExportQueryOptions = <
 export type GetDocsExportQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsExport>>>;
 export type GetDocsExportQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>;
 
+/**
+ * Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
+ * @summary Download a permission-scoped offline Lab Book
+ */
 export function useGetDocsExport<
   TData = Awaited<ReturnType<typeof getDocsExport>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -457,6 +459,10 @@ export function useGetDocsExport<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
+ * @summary Download a permission-scoped offline Lab Book
+ */
 export function useGetDocsExport<
   TData = Awaited<ReturnType<typeof getDocsExport>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -476,6 +482,10 @@ export function useGetDocsExport<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
+ * @summary Download a permission-scoped offline Lab Book
+ */
 export function useGetDocsExport<
   TData = Awaited<ReturnType<typeof getDocsExport>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -488,9 +498,9 @@ export function useGetDocsExport<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Includes only active docs the signed-in caller may view. HTML embeds Mermaid, CSS and images for offline use; md.zip preserves hierarchy and attachments for Markdown import.
  * @summary Download a permission-scoped offline Lab Book
  */
-
 export function useGetDocsExport<
   TData = Awaited<ReturnType<typeof getDocsExport>>,
   TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
@@ -582,6 +592,7 @@ export type PostDocsImportMutationError = ErrorType<BadRequestResponse | Forbidd
 export type PostDocsImportMutationVariables = { data: BodyType<PostDocsImportBody> };
 
 /**
+ * Stages the zip (100 MB cap; at most 2000 entries, 500 MB unzipped and a 100:1 compression ratio) for one hour and returns the docs it would create. Nothing is written to the docs until the commit. The `source` field picks the parser: `markdown` (default) for Markdown folders and Obsidian vaults, `wikijs` for a Wiki.js 2.x storage export.
  * @summary Stage a Markdown/Obsidian vault zip or a Wiki.js export zip and preview the import (instance admin)
  */
 export const usePostDocsImport = <
@@ -673,6 +684,7 @@ export type PostDocsImportPullMutationError = ErrorType<Error | ForbiddenRespons
 export type PostDocsImportPullMutationVariables = { data: BodyType<DocPullRequest> };
 
 /**
+ * When `stepUpForDestructive` is enabled, requires an `X-Elevation-Token` for action `docs.import.pull`: a missing token gets 400 `elevation_required`, an invalid, expired, already used or mismatched token gets 401 `unauthorized`. BookStack v25.07 or newer is required for the ZIP export API. Imports all readable shelves, books and pages into a staged zip that is previewed and committed like any other import. For `wikijs`, a Wiki.js 2.x API key with `read:pages`, `read:source` and `read:assets` goes in `tokenSecret` (no `tokenId`); pages and assets are pulled over GraphQL into the Wiki.js export layout, then previewed and committed the same way. Each downloaded book export and the final staged archive are capped at 100 MiB, and the archive expands to at most 500 MB and 2000 entries. Credentials remain in memory until the job ends. TLS verification is enabled unless explicitly disabled, and that choice is audited. Private networks are allowed; loopback, link-local and metadata addresses and redirects are blocked. Only one pull runs at a time.
  * @summary Start a background BookStack or Wiki.js import (instance admin, elevated)
  */
 export const usePostDocsImportPull = <
@@ -739,6 +751,7 @@ export type GetDocsImportPullQueryError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | Error
 >;
 
+/** @summary Read the current pull and its preview when ready (instance admin) */
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
@@ -757,6 +770,7 @@ export function useGetDocsImportPull<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read the current pull and its preview when ready (instance admin) */
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
@@ -775,6 +789,7 @@ export function useGetDocsImportPull<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read the current pull and its preview when ready (instance admin) */
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
@@ -785,10 +800,7 @@ export function useGetDocsImportPull<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Read the current pull and its preview when ready (instance admin)
- */
-
+/** @summary Read the current pull and its preview when ready (instance admin) */
 export function useGetDocsImportPull<
   TData = Awaited<ReturnType<typeof getDocsImportPull>>,
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
@@ -865,9 +877,7 @@ export type DeleteDocsImportPullMutationError = ErrorType<
   UnauthorizedResponse | ForbiddenResponse | Error
 >;
 
-/**
- * @summary Cancel a running documentation pull (instance admin)
- */
+/** @summary Cancel a running documentation pull (instance admin) */
 export const useDeleteDocsImportPull = <
   TError = ErrorType<UnauthorizedResponse | ForbiddenResponse | Error>,
   TContext = unknown,
@@ -947,9 +957,7 @@ export type PostDocsImportImportIdCommitMutationError = ErrorType<
 >;
 export type PostDocsImportImportIdCommitMutationVariables = { importId: string };
 
-/**
- * @summary Create every doc of a staged import in one transaction (instance admin)
- */
+/** @summary Create every doc of a staged import in one transaction (instance admin) */
 export const usePostDocsImportImportIdCommit = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
@@ -1030,9 +1038,7 @@ export type PostDocsDocIdRestoreMutationError = ErrorType<
 >;
 export type PostDocsDocIdRestoreMutationVariables = { docId: string };
 
-/**
- * @summary Restore a deleted subtree batch (instance admin)
- */
+/** @summary Restore a deleted subtree batch (instance admin) */
 export const usePostDocsDocIdRestore = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
@@ -1093,6 +1099,7 @@ export const getGetDocsTreeQueryOptions = <
 export type GetDocsTreeQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsTree>>>;
 export type GetDocsTreeQueryError = ErrorType<unknown>;
 
+/** @summary Hierarchical doc tree (lab root + per-service children) */
 export function useGetDocsTree<
   TData = Awaited<ReturnType<typeof getDocsTree>>,
   TError = ErrorType<unknown>,
@@ -1111,6 +1118,7 @@ export function useGetDocsTree<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Hierarchical doc tree (lab root + per-service children) */
 export function useGetDocsTree<
   TData = Awaited<ReturnType<typeof getDocsTree>>,
   TError = ErrorType<unknown>,
@@ -1129,6 +1137,7 @@ export function useGetDocsTree<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Hierarchical doc tree (lab root + per-service children) */
 export function useGetDocsTree<
   TData = Awaited<ReturnType<typeof getDocsTree>>,
   TError = ErrorType<unknown>,
@@ -1139,10 +1148,7 @@ export function useGetDocsTree<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Hierarchical doc tree (lab root + per-service children)
- */
-
+/** @summary Hierarchical doc tree (lab root + per-service children) */
 export function useGetDocsTree<
   TData = Awaited<ReturnType<typeof getDocsTree>>,
   TError = ErrorType<unknown>,
@@ -1215,6 +1221,7 @@ export type GetDocsServiceConnectorIdQueryResult = NonNullable<
 >;
 export type GetDocsServiceConnectorIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary The doc node for a given service */
 export function useGetDocsServiceConnectorId<
   TData = Awaited<ReturnType<typeof getDocsServiceConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1236,6 +1243,7 @@ export function useGetDocsServiceConnectorId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary The doc node for a given service */
 export function useGetDocsServiceConnectorId<
   TData = Awaited<ReturnType<typeof getDocsServiceConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1257,6 +1265,7 @@ export function useGetDocsServiceConnectorId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary The doc node for a given service */
 export function useGetDocsServiceConnectorId<
   TData = Awaited<ReturnType<typeof getDocsServiceConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1270,10 +1279,7 @@ export function useGetDocsServiceConnectorId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary The doc node for a given service
- */
-
+/** @summary The doc node for a given service */
 export function useGetDocsServiceConnectorId<
   TData = Awaited<ReturnType<typeof getDocsServiceConnectorId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1341,6 +1347,7 @@ export const getGetDocsDocIdQueryOptions = <
 export type GetDocsDocIdQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsDocId>>>;
 export type GetDocsDocIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Rendered doc node */
 export function useGetDocsDocId<
   TData = Awaited<ReturnType<typeof getDocsDocId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1360,6 +1367,7 @@ export function useGetDocsDocId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Rendered doc node */
 export function useGetDocsDocId<
   TData = Awaited<ReturnType<typeof getDocsDocId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1379,6 +1387,7 @@ export function useGetDocsDocId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Rendered doc node */
 export function useGetDocsDocId<
   TData = Awaited<ReturnType<typeof getDocsDocId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1390,10 +1399,7 @@ export function useGetDocsDocId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Rendered doc node
- */
-
+/** @summary Rendered doc node */
 export function useGetDocsDocId<
   TData = Awaited<ReturnType<typeof getDocsDocId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1478,9 +1484,7 @@ export type PutDocsDocIdMutationBody = BodyType<DocSave>;
 export type PutDocsDocIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>;
 export type PutDocsDocIdMutationVariables = { docId: string; data: BodyType<DocSave> };
 
-/**
- * @summary Save doc content (creates a new version; editor+)
- */
+/** @summary Save doc content (creates a new version; editor+) */
 export const usePutDocsDocId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse | Doc>,
   TContext = unknown,
@@ -1569,9 +1573,7 @@ export type PatchDocsDocIdMutationError = ErrorType<
 >;
 export type PatchDocsDocIdMutationVariables = { docId: string; data: BodyType<DocPatch> };
 
-/**
- * @summary Rename or re-parent a doc in the same scope (maximum depth five)
- */
+/** @summary Rename or re-parent a doc in the same scope (maximum depth five) */
 export const usePatchDocsDocId = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -1650,9 +1652,7 @@ export type DeleteDocsDocIdMutationResult = NonNullable<
 export type DeleteDocsDocIdMutationError = ErrorType<ForbiddenResponse | NotFoundResponse>;
 export type DeleteDocsDocIdMutationVariables = { docId: string };
 
-/**
- * @summary Soft-delete doc and its active descendants
- */
+/** @summary Soft-delete doc and its active descendants */
 export const useDeleteDocsDocId = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -1728,6 +1728,10 @@ export type GetDocsDocIdBacklinksQueryResult = NonNullable<
 >;
 export type GetDocsDocIdBacklinksQueryError = ErrorType<Error>;
 
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this doc
+ */
 export function useGetDocsDocIdBacklinks<
   TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -1749,6 +1753,10 @@ export function useGetDocsDocIdBacklinks<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this doc
+ */
 export function useGetDocsDocIdBacklinks<
   TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -1770,6 +1778,10 @@ export function useGetDocsDocIdBacklinks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
+ * @summary List visible docs referencing this doc
+ */
 export function useGetDocsDocIdBacklinks<
   TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -1784,9 +1796,9 @@ export function useGetDocsDocIdBacklinks<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Returns only active source docs the reader may view. Entity targets include links to identities merged into the current identity. Not available on share routes.
  * @summary List visible docs referencing this doc
  */
-
 export function useGetDocsDocIdBacklinks<
   TData = Awaited<ReturnType<typeof getDocsDocIdBacklinks>>,
   TError = ErrorType<Error>,
@@ -1862,6 +1874,7 @@ export type GetDocsDocIdAttachmentsQueryResult = NonNullable<
 >;
 export type GetDocsDocIdAttachmentsQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary List doc attachments with fifteen-minute signed URLs (viewer) */
 export function useGetDocsDocIdAttachments<
   TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1883,6 +1896,7 @@ export function useGetDocsDocIdAttachments<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List doc attachments with fifteen-minute signed URLs (viewer) */
 export function useGetDocsDocIdAttachments<
   TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1904,6 +1918,7 @@ export function useGetDocsDocIdAttachments<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List doc attachments with fifteen-minute signed URLs (viewer) */
 export function useGetDocsDocIdAttachments<
   TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
   TError = ErrorType<NotFoundResponse>,
@@ -1917,10 +1932,7 @@ export function useGetDocsDocIdAttachments<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List doc attachments with fifteen-minute signed URLs (viewer)
- */
-
+/** @summary List doc attachments with fifteen-minute signed URLs (viewer) */
 export function useGetDocsDocIdAttachments<
   TData = Awaited<ReturnType<typeof getDocsDocIdAttachments>>,
   TError = ErrorType<NotFoundResponse>,
@@ -2017,9 +2029,7 @@ export type PostDocsDocIdAttachmentsMutationVariables = {
   data: BodyType<PostDocsDocIdAttachmentsBody>;
 };
 
-/**
- * @summary Upload a sniffed image, PDF or text attachment (operator)
- */
+/** @summary Upload a sniffed image, PDF or text attachment (operator) */
 export const usePostDocsDocIdAttachments = <
   TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | void>,
   TContext = unknown,
@@ -2105,9 +2115,7 @@ export type DeleteDocsDocIdAttachmentsAidMutationError = ErrorType<
 >;
 export type DeleteDocsDocIdAttachmentsAidMutationVariables = { docId: string; aid: string };
 
-/**
- * @summary Delete doc attachment metadata (operator)
- */
+/** @summary Delete doc attachment metadata (operator) */
 export const useDeleteDocsDocIdAttachmentsAid = <
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
   TContext = unknown,
@@ -2187,6 +2195,7 @@ export type GetAttachmentsAidRawQueryResult = NonNullable<
 >;
 export type GetAttachmentsAidRawQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>;
 
+/** @summary Read attachment bytes using a signed URL */
 export function useGetAttachmentsAidRaw<
   TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -2209,6 +2218,7 @@ export function useGetAttachmentsAidRaw<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read attachment bytes using a signed URL */
 export function useGetAttachmentsAidRaw<
   TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -2231,6 +2241,7 @@ export function useGetAttachmentsAidRaw<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Read attachment bytes using a signed URL */
 export function useGetAttachmentsAidRaw<
   TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -2245,10 +2256,7 @@ export function useGetAttachmentsAidRaw<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Read attachment bytes using a signed URL
- */
-
+/** @summary Read attachment bytes using a signed URL */
 export function useGetAttachmentsAidRaw<
   TData = Awaited<ReturnType<typeof getAttachmentsAidRaw>>,
   TError = ErrorType<ForbiddenResponse | NotFoundResponse>,
@@ -2324,6 +2332,7 @@ export type GetDocsDocIdVersionsQueryResult = NonNullable<
 >;
 export type GetDocsDocIdVersionsQueryError = ErrorType<unknown>;
 
+/** @summary Version history list for a doc node */
 export function useGetDocsDocIdVersions<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersions>>,
   TError = ErrorType<unknown>,
@@ -2345,6 +2354,7 @@ export function useGetDocsDocIdVersions<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Version history list for a doc node */
 export function useGetDocsDocIdVersions<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersions>>,
   TError = ErrorType<unknown>,
@@ -2366,6 +2376,7 @@ export function useGetDocsDocIdVersions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Version history list for a doc node */
 export function useGetDocsDocIdVersions<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersions>>,
   TError = ErrorType<unknown>,
@@ -2379,10 +2390,7 @@ export function useGetDocsDocIdVersions<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Version history list for a doc node
- */
-
+/** @summary Version history list for a doc node */
 export function useGetDocsDocIdVersions<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersions>>,
   TError = ErrorType<unknown>,
@@ -2460,6 +2468,7 @@ export type GetDocsDocIdVersionsRevQueryResult = NonNullable<
 >;
 export type GetDocsDocIdVersionsRevQueryError = ErrorType<unknown>;
 
+/** @summary A specific doc revision */
 export function useGetDocsDocIdVersionsRev<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -2482,6 +2491,7 @@ export function useGetDocsDocIdVersionsRev<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A specific doc revision */
 export function useGetDocsDocIdVersionsRev<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -2504,6 +2514,7 @@ export function useGetDocsDocIdVersionsRev<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A specific doc revision */
 export function useGetDocsDocIdVersionsRev<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -2518,10 +2529,7 @@ export function useGetDocsDocIdVersionsRev<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary A specific doc revision
- */
-
+/** @summary A specific doc revision */
 export function useGetDocsDocIdVersionsRev<
   TData = Awaited<ReturnType<typeof getDocsDocIdVersionsRev>>,
   TError = ErrorType<unknown>,
@@ -2606,9 +2614,7 @@ export type PostDocsDocIdVersionsRevRestoreMutationResult = NonNullable<
 export type PostDocsDocIdVersionsRevRestoreMutationError = ErrorType<unknown>;
 export type PostDocsDocIdVersionsRevRestoreMutationVariables = { docId: string; rev: number };
 
-/**
- * @summary Restore a past revision as a new current version (editor+)
- */
+/** @summary Restore a past revision as a new current version (editor+) */
 export const usePostDocsDocIdVersionsRevRestore = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -2699,6 +2705,7 @@ export type PostDocsDocIdAiSuggestMutationVariables = {
 };
 
 /**
+ * Only available when the AI module is enabled (§2). Returns a request id to correlate with WS events.
  * @summary Request an AI suggestion for the doc (result streams via doc.ai_suggestion WS)
  */
 export const usePostDocsDocIdAiSuggest = <TError = ErrorType<Error>, TContext = unknown>(
@@ -2765,6 +2772,7 @@ export const getGetDocsDocIdLockQueryOptions = <
 export type GetDocsDocIdLockQueryResult = NonNullable<Awaited<ReturnType<typeof getDocsDocIdLock>>>;
 export type GetDocsDocIdLockQueryError = ErrorType<unknown>;
 
+/** @summary Current advisory edit lock on the doc, if any (any authenticated user) */
 export function useGetDocsDocIdLock<
   TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
   TError = ErrorType<unknown>,
@@ -2784,6 +2792,7 @@ export function useGetDocsDocIdLock<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current advisory edit lock on the doc, if any (any authenticated user) */
 export function useGetDocsDocIdLock<
   TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
   TError = ErrorType<unknown>,
@@ -2803,6 +2812,7 @@ export function useGetDocsDocIdLock<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Current advisory edit lock on the doc, if any (any authenticated user) */
 export function useGetDocsDocIdLock<
   TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
   TError = ErrorType<unknown>,
@@ -2814,10 +2824,7 @@ export function useGetDocsDocIdLock<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Current advisory edit lock on the doc, if any (any authenticated user)
- */
-
+/** @summary Current advisory edit lock on the doc, if any (any authenticated user) */
 export function useGetDocsDocIdLock<
   TData = Awaited<ReturnType<typeof getDocsDocIdLock>>,
   TError = ErrorType<unknown>,
@@ -2894,9 +2901,7 @@ export type PostDocsDocIdLockMutationResult = NonNullable<
 export type PostDocsDocIdLockMutationError = ErrorType<DocLock>;
 export type PostDocsDocIdLockMutationVariables = { docId: string };
 
-/**
- * @summary Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save.
- */
+/** @summary Acquire or renew the advisory edit lock (editor+). Advisory only — never blocks Save. */
 export const usePostDocsDocIdLock = <TError = ErrorType<DocLock>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -2975,9 +2980,7 @@ export type PostDocsDocIdLockReleaseMutationResult = NonNullable<
 export type PostDocsDocIdLockReleaseMutationError = ErrorType<unknown>;
 export type PostDocsDocIdLockReleaseMutationVariables = { docId: string };
 
-/**
- * @summary Release the advisory edit lock if held by the caller (editor+)
- */
+/** @summary Release the advisory edit lock if held by the caller (editor+) */
 export const usePostDocsDocIdLockRelease = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -3047,6 +3050,10 @@ export type GetDocsEditProposalsQueryResult = NonNullable<
 >;
 export type GetDocsEditProposalsQueryError = ErrorType<BadRequestResponse>;
 
+/**
+ * Proposals are created by the MCP `propose_doc_edit` tool and never applied until approved.
+ * @summary Doc edit proposals the caller can review (operator on the doc's connector; instance admin for lab-wide docs)
+ */
 export function useGetDocsEditProposals<
   TData = Awaited<ReturnType<typeof getDocsEditProposals>>,
   TError = ErrorType<BadRequestResponse>,
@@ -3068,6 +3075,10 @@ export function useGetDocsEditProposals<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Proposals are created by the MCP `propose_doc_edit` tool and never applied until approved.
+ * @summary Doc edit proposals the caller can review (operator on the doc's connector; instance admin for lab-wide docs)
+ */
 export function useGetDocsEditProposals<
   TData = Awaited<ReturnType<typeof getDocsEditProposals>>,
   TError = ErrorType<BadRequestResponse>,
@@ -3089,6 +3100,10 @@ export function useGetDocsEditProposals<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * Proposals are created by the MCP `propose_doc_edit` tool and never applied until approved.
+ * @summary Doc edit proposals the caller can review (operator on the doc's connector; instance admin for lab-wide docs)
+ */
 export function useGetDocsEditProposals<
   TData = Awaited<ReturnType<typeof getDocsEditProposals>>,
   TError = ErrorType<BadRequestResponse>,
@@ -3103,9 +3118,9 @@ export function useGetDocsEditProposals<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 /**
+ * Proposals are created by the MCP `propose_doc_edit` tool and never applied until approved.
  * @summary Doc edit proposals the caller can review (operator on the doc's connector; instance admin for lab-wide docs)
  */
-
 export function useGetDocsEditProposals<
   TData = Awaited<ReturnType<typeof getDocsEditProposals>>,
   TError = ErrorType<BadRequestResponse>,
@@ -3183,6 +3198,7 @@ export type GetDocsEditProposalsProposalIdQueryResult = NonNullable<
 >;
 export type GetDocsEditProposalsProposalIdQueryError = ErrorType<NotFoundResponse>;
 
+/** @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs) */
 export function useGetDocsEditProposalsProposalId<
   TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3204,6 +3220,7 @@ export function useGetDocsEditProposalsProposalId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs) */
 export function useGetDocsEditProposalsProposalId<
   TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3225,6 +3242,7 @@ export function useGetDocsEditProposalsProposalId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs) */
 export function useGetDocsEditProposalsProposalId<
   TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3238,10 +3256,7 @@ export function useGetDocsEditProposalsProposalId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs)
- */
-
+/** @summary Get one proposal including its proposed content (operator on the doc's connector; instance admin for lab-wide docs) */
 export function useGetDocsEditProposalsProposalId<
   TData = Awaited<ReturnType<typeof getDocsEditProposalsProposalId>>,
   TError = ErrorType<NotFoundResponse>,
@@ -3326,9 +3341,7 @@ export type PostDocsEditProposalsProposalIdApproveMutationError = ErrorType<
 >;
 export type PostDocsEditProposalsProposalIdApproveMutationVariables = { proposalId: string };
 
-/**
- * @summary Approve a proposal, applying it as a new doc version (operator)
- */
+/** @summary Approve a proposal, applying it as a new doc version (operator) */
 export const usePostDocsEditProposalsProposalIdApprove = <
   TError = ErrorType<NotFoundResponse | Doc | Error>,
   TContext = unknown,
@@ -3416,9 +3429,7 @@ export type PostDocsEditProposalsProposalIdRejectMutationError = ErrorType<
 >;
 export type PostDocsEditProposalsProposalIdRejectMutationVariables = { proposalId: string };
 
-/**
- * @summary Reject a proposal without changing the doc (operator)
- */
+/** @summary Reject a proposal without changing the doc (operator) */
 export const usePostDocsEditProposalsProposalIdReject = <
   TError = ErrorType<NotFoundResponse | Error>,
   TContext = unknown,
@@ -3486,6 +3497,7 @@ export type GetDocsTemplateSchemaQueryResult = NonNullable<
 >;
 export type GetDocsTemplateSchemaQueryError = ErrorType<unknown>;
 
+/** @summary Available templateData field paths and filter functions, for editor reference */
 export function useGetDocsTemplateSchema<
   TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
   TError = ErrorType<unknown>,
@@ -3506,6 +3518,7 @@ export function useGetDocsTemplateSchema<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Available templateData field paths and filter functions, for editor reference */
 export function useGetDocsTemplateSchema<
   TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
   TError = ErrorType<unknown>,
@@ -3526,6 +3539,7 @@ export function useGetDocsTemplateSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Available templateData field paths and filter functions, for editor reference */
 export function useGetDocsTemplateSchema<
   TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
   TError = ErrorType<unknown>,
@@ -3538,10 +3552,7 @@ export function useGetDocsTemplateSchema<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Available templateData field paths and filter functions, for editor reference
- */
-
+/** @summary Available templateData field paths and filter functions, for editor reference */
 export function useGetDocsTemplateSchema<
   TData = Awaited<ReturnType<typeof getDocsTemplateSchema>>,
   TError = ErrorType<unknown>,
@@ -3628,9 +3639,7 @@ export type PostDocsGenerateMutationBody = BodyType<PostDocsGenerateBody>;
 export type PostDocsGenerateMutationError = ErrorType<BadRequestResponse | void>;
 export type PostDocsGenerateMutationVariables = { data: BodyType<PostDocsGenerateBody> };
 
-/**
- * @summary Generate a doc from a template applied to a connector's live snapshot
- */
+/** @summary Generate a doc from a template applied to a connector's live snapshot */
 export const usePostDocsGenerate = <
   TError = ErrorType<BadRequestResponse | void>,
   TContext = unknown,
@@ -3697,9 +3706,7 @@ export type PostDocsTopologyMutationResult = NonNullable<
 
 export type PostDocsTopologyMutationError = ErrorType<unknown>;
 
-/**
- * @summary (Re)generate the single lab-wide topology doc from every connector's latest snapshot
- */
+/** @summary (Re)generate the single lab-wide topology doc from every connector's latest snapshot */
 export const usePostDocsTopology = <TError = ErrorType<unknown>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -3757,6 +3764,7 @@ export type GetDocsShareLinksQueryResult = NonNullable<
 >;
 export type GetDocsShareLinksQueryError = ErrorType<unknown>;
 
+/** @summary List the caller's read-only doc share links */
 export function useGetDocsShareLinks<
   TData = Awaited<ReturnType<typeof getDocsShareLinks>>,
   TError = ErrorType<unknown>,
@@ -3775,6 +3783,7 @@ export function useGetDocsShareLinks<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the caller's read-only doc share links */
 export function useGetDocsShareLinks<
   TData = Awaited<ReturnType<typeof getDocsShareLinks>>,
   TError = ErrorType<unknown>,
@@ -3793,6 +3802,7 @@ export function useGetDocsShareLinks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary List the caller's read-only doc share links */
 export function useGetDocsShareLinks<
   TData = Awaited<ReturnType<typeof getDocsShareLinks>>,
   TError = ErrorType<unknown>,
@@ -3803,10 +3813,7 @@ export function useGetDocsShareLinks<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary List the caller's read-only doc share links
- */
-
+/** @summary List the caller's read-only doc share links */
 export function useGetDocsShareLinks<
   TData = Awaited<ReturnType<typeof getDocsShareLinks>>,
   TError = ErrorType<unknown>,
@@ -3895,6 +3902,7 @@ export type PostDocsShareLinksMutationError = ErrorType<
 export type PostDocsShareLinksMutationVariables = { data: BodyType<PostDocsShareLinksBody> };
 
 /**
+ * The response carries the raw token once; only its hash is stored.
  * @summary Create a read-only share link for a doc or doc subtree
  */
 export const usePostDocsShareLinks = <
@@ -3978,9 +3986,7 @@ export type DeleteDocsShareLinksIdMutationResult = NonNullable<
 export type DeleteDocsShareLinksIdMutationError = ErrorType<NotFoundResponse>;
 export type DeleteDocsShareLinksIdMutationVariables = { id: string };
 
-/**
- * @summary Revoke a share link (creator or instance admin)
- */
+/** @summary Revoke a share link (creator or instance admin) */
 export const useDeleteDocsShareLinksId = <TError = ErrorType<NotFoundResponse>, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
@@ -4050,6 +4056,7 @@ export type GetShareTokenTreeQueryResult = NonNullable<
 >;
 export type GetShareTokenTreeQueryError = ErrorType<NotFoundResponse | void>;
 
+/** @summary Doc tree visible through a share link (unauthenticated) */
 export function useGetShareTokenTree<
   TData = Awaited<ReturnType<typeof getShareTokenTree>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4069,6 +4076,7 @@ export function useGetShareTokenTree<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Doc tree visible through a share link (unauthenticated) */
 export function useGetShareTokenTree<
   TData = Awaited<ReturnType<typeof getShareTokenTree>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4088,6 +4096,7 @@ export function useGetShareTokenTree<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary Doc tree visible through a share link (unauthenticated) */
 export function useGetShareTokenTree<
   TData = Awaited<ReturnType<typeof getShareTokenTree>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4099,10 +4108,7 @@ export function useGetShareTokenTree<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary Doc tree visible through a share link (unauthenticated)
- */
-
+/** @summary Doc tree visible through a share link (unauthenticated) */
 export function useGetShareTokenTree<
   TData = Awaited<ReturnType<typeof getShareTokenTree>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4177,6 +4183,7 @@ export type GetShareTokenDocsDocIdQueryResult = NonNullable<
 >;
 export type GetShareTokenDocsDocIdQueryError = ErrorType<NotFoundResponse | void>;
 
+/** @summary A doc visible through a share link (unauthenticated, read-only) */
 export function useGetShareTokenDocsDocId<
   TData = Awaited<ReturnType<typeof getShareTokenDocsDocId>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4199,6 +4206,7 @@ export function useGetShareTokenDocsDocId<
   },
   queryClient?: QueryClient
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A doc visible through a share link (unauthenticated, read-only) */
 export function useGetShareTokenDocsDocId<
   TData = Awaited<ReturnType<typeof getShareTokenDocsDocId>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4221,6 +4229,7 @@ export function useGetShareTokenDocsDocId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/** @summary A doc visible through a share link (unauthenticated, read-only) */
 export function useGetShareTokenDocsDocId<
   TData = Awaited<ReturnType<typeof getShareTokenDocsDocId>>,
   TError = ErrorType<NotFoundResponse | void>,
@@ -4235,10 +4244,7 @@ export function useGetShareTokenDocsDocId<
   },
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-/**
- * @summary A doc visible through a share link (unauthenticated, read-only)
- */
-
+/** @summary A doc visible through a share link (unauthenticated, read-only) */
 export function useGetShareTokenDocsDocId<
   TData = Awaited<ReturnType<typeof getShareTokenDocsDocId>>,
   TError = ErrorType<NotFoundResponse | void>,
